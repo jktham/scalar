@@ -57,16 +57,13 @@ fn setup (
 ) {
     let tiles = generate_tiles();
     let mesh_handle_quad = meshes.add(Rectangle::new(1.0, 1.0));
-    let material_handle_red = materials.add(Color::srgb(1.0, 0.0, 0.0));
-    let material_handle_green = materials.add(Color::srgb(0.0, 1.0, 0.0));
-    let material_handle_blue = materials.add(Color::srgb(0.0, 0.0, 1.0));
 
     for tile in tiles {
         let transform = Transform::from_xyz(tile.pos.x as f32, 0.0, tile.pos.y as f32);
         let material_handle = match tile.resource {
-            TileResource::None => material_handle_green.clone(),
-            TileResource::Iron => material_handle_blue.clone(),
-            TileResource::Copper => material_handle_red.clone(),
+            TileResource::None => materials.add(Color::srgb(0.0, 1.0, 0.0)),
+            TileResource::Iron => materials.add(Color::srgb(0.0, 0.0, 1.0)),
+            TileResource::Copper => materials.add(Color::srgb(1.0, 0.0, 0.0)),
         };
 
         commands.spawn((
@@ -130,6 +127,33 @@ fn update_camera (
     camera.translation += movement * speed * time.delta().as_secs_f32();
 }
 
+fn update_cursor (
+    camera_query: Single<(&Camera, &GlobalTransform)>,
+    window: Single<&Window>,
+    tiles_query: Query<(&Tile, &MeshMaterial3d<StandardMaterial>)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let (camera, camera_transform) = *camera_query;
+
+    if let Some(cursor_position) = window.cursor_position()
+        && let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_position)
+        && let Some(distance) = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y))
+    {
+        let point = ray.get_point(distance);
+
+        let tile_coords: IVec2 = point.xz().round().as_ivec2();
+        for (tile, material_handle) in tiles_query {
+            if let Some(material) = materials.get_mut(&material_handle.0) {
+                if tile.pos == tile_coords {
+                    material.emissive = LinearRgba::WHITE;
+                } else {
+                    material.emissive = LinearRgba::BLACK;
+                }
+            }
+        }
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins((
@@ -160,6 +184,6 @@ fn main() {
             },
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, update_camera)
+        .add_systems(Update, (update_camera, update_cursor).chain())
         .run();
 }
