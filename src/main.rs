@@ -1,10 +1,9 @@
 use bevy::{
-    dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
-    prelude::*,
+    dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig}, prelude::*, render::view::NoIndirectDrawing, window::{PresentMode, WindowResolution}
 };
 use rand::prelude::*;
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 enum TileResource {
     None,
     Iron,
@@ -34,7 +33,7 @@ struct Tile {
 }
 
 fn generate_tiles() -> Vec<Tile> {
-    const SIZE: i32 = 10;
+    const SIZE: i32 = 21;
     let mut rng = rand::rng();
 
     let mut tiles = Vec::new();
@@ -57,47 +56,92 @@ fn setup (
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let tiles = generate_tiles();
+    let mesh_handle_quad = meshes.add(Rectangle::new(1.0, 1.0));
+    let material_handle_red = materials.add(Color::srgb(1.0, 0.0, 0.0));
+    let material_handle_green = materials.add(Color::srgb(0.0, 1.0, 0.0));
+    let material_handle_blue = materials.add(Color::srgb(0.0, 0.0, 1.0));
+
     for tile in tiles {
         let transform = Transform::from_xyz(tile.pos.x as f32, 0.0, tile.pos.y as f32);
-        let color = match tile.resource {
-            TileResource::None => Color::srgb(0.0, 1.0, 0.0),
-            TileResource::Iron => Color::srgb(0.0, 0.0, 1.0),
-            TileResource::Copper => Color::srgb(1.0, 0.0, 0.0),
+        let material_handle = match tile.resource {
+            TileResource::None => material_handle_green.clone(),
+            TileResource::Iron => material_handle_blue.clone(),
+            TileResource::Copper => material_handle_red.clone(),
         };
 
         commands.spawn((
             tile,
-            Mesh3d(meshes.add(Cuboid::new(1.0, 0.25, 1.0))),
-            MeshMaterial3d(materials.add(color)),
-            transform,
+            Mesh3d(mesh_handle_quad.clone()),
+            MeshMaterial3d(material_handle),
+            transform * Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
         ));
     }
 
     commands.spawn((
-        PointLight {
+        DirectionalLight {
             shadows_enabled: true,
+            illuminance: light_consts::lux::AMBIENT_DAYLIGHT,
             ..default()
         },
-        Transform::from_xyz(4.0, 8.0, 4.0),
+        Transform::from_xyz(4.0, 8.0, 2.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+        NoIndirectDrawing,
+        Transform::from_xyz(-10.0, 10.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(0.5, 0.5, 0.5))),
+        MeshMaterial3d(materials.add(Color::srgb(1.0, 1.0, 1.0))),
+        Transform::from_xyz(0.0, 1.0, 0.0),
     ));
 
 }
 
-fn list_tiles(query: Query<&Tile>) {
-    for tile in &query {
-        println!("{:?}", tile);
+fn update_camera (
+    mut camera: Single<&mut Transform, With<Camera>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+) {
+    let left = Vec3::Y.cross(camera.forward().as_vec3()).normalize();
+    let front = left.cross(Vec3::Y).normalize();
+
+    let mut movement = Vec3::ZERO;
+    if keyboard_input.pressed(KeyCode::KeyA) {
+        movement += left;
     }
+    if keyboard_input.pressed(KeyCode::KeyD) {
+        movement -= left;
+    }
+    if keyboard_input.pressed(KeyCode::KeyW) {
+        movement += front;
+    }
+    if keyboard_input.pressed(KeyCode::KeyS) {
+        movement -= front;
+    }
+
+    let mut speed = 10.0;
+    if keyboard_input.pressed(KeyCode::ShiftLeft) {
+        speed *= 2.0;
+    }
+
+    camera.translation += movement * speed * time.delta().as_secs_f32();
 }
 
 fn main() {
     App::new()
         .add_plugins((
-            DefaultPlugins,
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "scalar".into(),
+                    resolution: WindowResolution::new(960, 540),
+                    present_mode: PresentMode::AutoVsync,
+                    ..default()
+                }),
+                ..default()
+            }),
             FpsOverlayPlugin {
                 config: FpsOverlayConfig {
                     text_config: TextFont {
@@ -116,6 +160,6 @@ fn main() {
             },
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, list_tiles)
+        .add_systems(Update, update_camera)
         .run();
 }
