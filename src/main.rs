@@ -1,27 +1,29 @@
+use std::collections::HashMap;
+
 use bevy::{
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig}, prelude::*, render::view::NoIndirectDrawing, window::{PresentMode, WindowResolution}
 };
 use rand::prelude::*;
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-enum TileResource {
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+enum Item {
     None,
     Iron,
     Copper,
 }
 
-impl Default for TileResource {
+impl Default for Item {
     fn default() -> Self {
-        TileResource::None
+        Item::None
     }
 }
 
-impl Distribution<TileResource> for rand::distr::StandardUniform {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> TileResource {
+impl Distribution<Item> for rand::distr::StandardUniform {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Item {
         match rng.random_range(0..100) {
-            0..10 => TileResource::Iron,
-            10..20 => TileResource::Copper,
-            _ => TileResource::None,
+            0..10 => Item::Iron,
+            10..20 => Item::Copper,
+            _ => Item::None,
         }
     }
 }
@@ -29,8 +31,17 @@ impl Distribution<TileResource> for rand::distr::StandardUniform {
 #[derive(Component, Default, Debug)]
 struct Tile {
     pos: IVec2,
-    resource: TileResource,
+    resource: Item,
+    resource_count: i32,
 }
+
+#[derive(Resource, Default, Debug)]
+struct Inventory {
+    items: HashMap<Item, i32>,
+}
+
+#[derive(Component)]
+struct InventoryText;
 
 fn generate_tiles() -> Vec<Tile> {
     const SIZE: i32 = 21;
@@ -39,10 +50,13 @@ fn generate_tiles() -> Vec<Tile> {
     let mut tiles = Vec::new();
     for x in 0..SIZE {
         for y in 0..SIZE {
+            let resource = rng.random::<Item>();
+            let resource_count = if resource == Item::None { 0 } else { rng.random_range(1..100) };
             tiles.push(
                 Tile {
                     pos: IVec2 { x: x - SIZE/2, y: y - SIZE/2 },
-                    resource: rng.random::<TileResource>(),
+                    resource,
+                    resource_count,
                 }
             );
         }
@@ -61,9 +75,9 @@ fn setup (
     for tile in tiles {
         let transform = Transform::from_xyz(tile.pos.x as f32, 0.0, tile.pos.y as f32);
         let material_handle = match tile.resource {
-            TileResource::None => materials.add(Color::srgb(0.0, 1.0, 0.0)),
-            TileResource::Iron => materials.add(Color::srgb(0.0, 0.0, 1.0)),
-            TileResource::Copper => materials.add(Color::srgb(1.0, 0.0, 0.0)),
+            Item::None => materials.add(Color::srgb(0.0, 1.0, 0.0)),
+            Item::Iron => materials.add(Color::srgb(0.0, 0.0, 1.0)),
+            Item::Copper => materials.add(Color::srgb(1.0, 0.0, 0.0)),
         };
 
         commands.spawn((
@@ -95,6 +109,19 @@ fn setup (
         Transform::from_xyz(0.0, 1.0, 0.0),
     ));
 
+    commands.spawn((
+        Text::new("Inventory"),
+        TextFont {
+            font_size: 16.0,
+            ..default()
+        },
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(60),
+            ..default()
+        },
+        InventoryText,
+    ));
 }
 
 fn update_camera (
@@ -130,8 +157,10 @@ fn update_camera (
 fn update_cursor (
     camera_query: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
-    tiles_query: Query<(&Tile, &MeshMaterial3d<StandardMaterial>)>,
+    tiles_query: Query<(&mut Tile, &MeshMaterial3d<StandardMaterial>)>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut inventory: ResMut<Inventory>,
 ) {
     let (camera, camera_transform) = *camera_query;
 
@@ -142,16 +171,36 @@ fn update_cursor (
         let point = ray.get_point(distance);
 
         let tile_coords: IVec2 = point.xz().round().as_ivec2();
-        for (tile, material_handle) in tiles_query {
+        for (mut tile, material_handle) in tiles_query {
             if let Some(material) = materials.get_mut(&material_handle.0) {
                 if tile.pos == tile_coords {
                     material.emissive = LinearRgba::WHITE;
+
+                    if mouse_input.just_pressed(MouseButton::Left) {
+                        if tile.resource_count > 0 {
+                            tile.resource_count -= 1;
+                            let count = *inventory.items.get(&tile.resource).unwrap_or(&0);
+                            inventory.items.insert(tile.resource.clone(), count + 1);
+                        }
+                        material.emissive = LinearRgba::BLACK;
+                    }
                 } else {
                     material.emissive = LinearRgba::BLACK;
                 }
             }
         }
     }
+}
+
+fn draw_ui (
+    inventory: Res<Inventory>,
+    mut inventory_text: Single<&mut Text, With<InventoryText>>,
+) {
+    let mut text = String::from("Inventory\n");
+    for (item, count) in &inventory.items {
+        text += &format!("{:?}: {:?}\n", item, count);
+    }
+    inventory_text.0 = text;
 }
 
 fn main() {
@@ -169,10 +218,10 @@ fn main() {
             FpsOverlayPlugin {
                 config: FpsOverlayConfig {
                     text_config: TextFont {
-                        font_size: 20.0,
+                        font_size: 16.0,
                         ..default()
                     },
-                    text_color: Color::srgb(0.0, 1.0, 0.0),
+                    text_color: Color::WHITE,
                     refresh_interval: core::time::Duration::from_millis(100),
                     enabled: true,
                     frame_time_graph_config: FrameTimeGraphConfig {
@@ -183,7 +232,8 @@ fn main() {
                 },
             },
         ))
+        .insert_resource(Inventory::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, (update_camera, update_cursor).chain())
+        .add_systems(Update, (update_camera, update_cursor, draw_ui).chain())
         .run();
 }
