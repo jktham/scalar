@@ -1,6 +1,6 @@
 use crate::{
     inventory::Inventory,
-    terrain::{ResourceNode, Tile, setup_terrain},
+    map::{Map, ResourceNode, Tile, setup_map, world_to_tile},
     ui::{setup_ui, update_ui},
 };
 use bevy::{
@@ -11,8 +11,11 @@ use bevy::{
 };
 
 mod inventory;
-mod terrain;
+mod map;
 mod ui;
+
+#[derive(Resource, Default)]
+pub struct HoverPos(IVec2);
 
 fn setup(mut commands: Commands) {
     commands.spawn((
@@ -32,11 +35,13 @@ fn setup(mut commands: Commands) {
 }
 
 fn update_camera(
-    mut camera: Single<&mut Transform, With<Camera>>,
+    mut camera_transform: Single<&mut Transform, With<Camera>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
 ) {
-    let left = Vec3::Y.cross(camera.forward().as_vec3()).normalize();
+    let left = Vec3::Y
+        .cross(camera_transform.forward().as_vec3())
+        .normalize();
     let front = left.cross(Vec3::Y).normalize();
 
     let mut movement = Vec3::ZERO;
@@ -58,16 +63,18 @@ fn update_camera(
         speed *= 2.0;
     }
 
-    camera.translation += movement * speed * time.delta().as_secs_f32();
+    camera_transform.translation += movement * speed * time.delta().as_secs_f32();
 }
 
-fn update_cursor(
-    camera_query: Single<(&Camera, &GlobalTransform)>,
+fn update_hover(
     window: Single<&Window>,
+    camera_query: Single<(&Camera, &GlobalTransform)>,
     tiles_query: Query<(&mut Tile, &MeshMaterial3d<StandardMaterial>)>,
-    nodes_query: Query<&mut ResourceNode>,
+    mut nodes_query: Query<&mut ResourceNode>,
     mouse_input: Res<ButtonInput<MouseButton>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut hover_pos: ResMut<HoverPos>,
+    map: Res<Map>,
     mut inventory: ResMut<Inventory>,
 ) {
     let (camera, camera_transform) = *camera_query;
@@ -77,28 +84,31 @@ fn update_cursor(
         && let Some(distance) = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y))
     {
         let point = ray.get_point(distance);
-        let tile_pos: IVec2 = point.xz().round().as_ivec2();
+        let current_hover_pos: IVec2 = world_to_tile(&point);
+        let prev_hover_pos: IVec2 = hover_pos.0;
+        hover_pos.0 = current_hover_pos;
 
-        for (tile, material_handle) in tiles_query {
-            if let Some(material) = materials.get_mut(&material_handle.0) {
-                if tile.tile_pos == tile_pos {
-                    material.emissive = LinearRgba::WHITE;
-                } else {
-                    material.emissive = LinearRgba::BLACK;
-                }
-            }
+        if let Some(tile_id) = map.tiles.get(&prev_hover_pos)
+            && let Ok((_tile, material_handle)) = tiles_query.get(*tile_id)
+            && let Some(material) = materials.get_mut(&material_handle.0)
+        {
+            material.emissive = LinearRgba::BLACK;
         }
 
-        if mouse_input.just_pressed(MouseButton::Left) {
-            for mut node in nodes_query {
-                if node.tile_pos == tile_pos {
-                    if node.stack.count > 0 {
-                        node.stack.count -= 1;
-                        inventory.add(&node.stack.item, 1);
-                    }
-                    break;
-                }
-            }
+        if let Some(tile_id) = map.tiles.get(&current_hover_pos)
+            && let Ok((_tile, material_handle)) = tiles_query.get(*tile_id)
+            && let Some(material) = materials.get_mut(&material_handle.0)
+        {
+            material.emissive = LinearRgba::WHITE;
+        }
+
+        if mouse_input.just_pressed(MouseButton::Left)
+            && let Some(node_id) = map.nodes.get(&current_hover_pos)
+            && let Ok(mut node) = nodes_query.get_mut(*node_id)
+            && node.stack.count > 0
+        {
+            node.stack.count -= 1;
+            inventory.add(&node.stack.item, 1);
         }
     }
 }
@@ -132,8 +142,10 @@ fn main() {
                 },
             },
         ))
+        .insert_resource(HoverPos::default())
+        .insert_resource(Map::default())
         .insert_resource(Inventory::default())
-        .add_systems(Startup, (setup, setup_terrain, setup_ui))
-        .add_systems(Update, (update_camera, update_cursor, update_ui))
+        .add_systems(Startup, (setup, setup_map, setup_ui))
+        .add_systems(Update, (update_camera, update_hover, update_ui))
         .run();
 }
