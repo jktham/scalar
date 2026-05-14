@@ -1,21 +1,20 @@
 use crate::{
     inventory::Inventory,
-    map::{Map, ResourceNode, Tile, setup_map, world_to_tile},
     ui::{setup_ui, update_ui},
+    world::{World, setup_world},
 };
 use bevy::{
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
+    input::mouse::AccumulatedMouseMotion,
     prelude::*,
     render::view::NoIndirectDrawing,
-    window::{PresentMode, WindowResolution},
+    window::{CursorGrabMode, CursorOptions, PresentMode, WindowResolution},
 };
+use bevy_obj::ObjPlugin;
 
 mod inventory;
-mod map;
 mod ui;
-
-#[derive(Resource, Default)]
-pub struct HoverPos(IVec2);
+mod world;
 
 fn setup(mut commands: Commands) {
     commands.spawn((
@@ -30,19 +29,35 @@ fn setup(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
         NoIndirectDrawing,
-        Transform::from_xyz(-10.0, 10.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(0.0, 2.0, 0.0).looking_to(Vec3::new(1.0, 0.0, 0.0), Vec3::Y),
     ));
+}
+
+fn cursor_grab(mut cursor_options: Single<&mut CursorOptions>) {
+    cursor_options.grab_mode = CursorGrabMode::Confined;
+    cursor_options.visible = false;
+}
+
+fn cursor_ungrab(mut cursor_options: Single<&mut CursorOptions>) {
+    cursor_options.grab_mode = CursorGrabMode::None;
+    cursor_options.visible = true;
 }
 
 fn update_camera(
     mut camera_transform: Single<&mut Transform, With<Camera>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
+    mouse_motion: Res<AccumulatedMouseMotion>,
     time: Res<Time>,
 ) {
     let left = Vec3::Y
         .cross(camera_transform.forward().as_vec3())
         .normalize();
-    let front = left.cross(Vec3::Y).normalize();
+    let front = left.cross(Vec3::Y).normalize(); // in plane
+
+    const SENSITIVITY: f32 = 0.001;
+    camera_transform.rotation = Quat::from_rotation_y(-mouse_motion.delta.x * SENSITIVITY)
+        * Quat::from_axis_angle(left, mouse_motion.delta.y * SENSITIVITY)
+        * camera_transform.rotation; // TODO: prevent flipping over pole
 
     let mut movement = Vec3::ZERO;
     if keyboard_input.pressed(KeyCode::KeyA) {
@@ -58,7 +73,8 @@ fn update_camera(
         movement -= front;
     }
 
-    let mut speed = 10.0;
+    const SPEED: f32 = 5.0;
+    let mut speed = SPEED;
     if keyboard_input.pressed(KeyCode::ShiftLeft) {
         speed *= 2.0;
     }
@@ -66,65 +82,20 @@ fn update_camera(
     camera_transform.translation += movement * speed * time.delta().as_secs_f32();
 }
 
-fn update_hover(
-    window: Single<&Window>,
-    camera_query: Single<(&Camera, &GlobalTransform)>,
-    tiles_query: Query<(&mut Tile, &MeshMaterial3d<StandardMaterial>)>,
-    mut nodes_query: Query<&mut ResourceNode>,
-    mouse_input: Res<ButtonInput<MouseButton>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut hover_pos: ResMut<HoverPos>,
-    map: Res<Map>,
-    mut inventory: ResMut<Inventory>,
-) {
-    let (camera, camera_transform) = *camera_query;
-
-    if let Some(cursor_position) = window.cursor_position()
-        && let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_position)
-        && let Some(distance) = ray.intersect_plane(Vec3::ZERO, InfinitePlane3d::new(Vec3::Y))
-    {
-        let point = ray.get_point(distance);
-        let current_hover_pos: IVec2 = world_to_tile(&point);
-        let prev_hover_pos: IVec2 = hover_pos.0;
-        hover_pos.0 = current_hover_pos;
-
-        if let Some(tile_id) = map.tiles.get(&prev_hover_pos)
-            && let Ok((_tile, material_handle)) = tiles_query.get(*tile_id)
-            && let Some(material) = materials.get_mut(&material_handle.0)
-        {
-            material.emissive = LinearRgba::BLACK;
-        }
-
-        if let Some(tile_id) = map.tiles.get(&current_hover_pos)
-            && let Ok((_tile, material_handle)) = tiles_query.get(*tile_id)
-            && let Some(material) = materials.get_mut(&material_handle.0)
-        {
-            material.emissive = LinearRgba::WHITE;
-        }
-
-        if mouse_input.just_pressed(MouseButton::Left)
-            && let Some(node_id) = map.nodes.get(&current_hover_pos)
-            && let Ok(mut node) = nodes_query.get_mut(*node_id)
-            && node.stack.count > 0
-        {
-            node.stack.count -= 1;
-            inventory.add(&node.stack.item, 1);
-        }
-    }
-}
-
 fn main() {
     App::new()
         .add_plugins((
-            DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(Window {
-                    title: "scalar".into(),
-                    resolution: WindowResolution::new(960, 540),
-                    present_mode: PresentMode::AutoVsync,
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "scalar".into(),
+                        resolution: WindowResolution::new(960, 540),
+                        present_mode: PresentMode::AutoVsync,
+                        ..default()
+                    }),
                     ..default()
-                }),
-                ..default()
-            }),
+                })
+                .set(ImagePlugin::default_nearest()),
             FpsOverlayPlugin {
                 config: FpsOverlayConfig {
                     text_config: TextFont {
@@ -141,11 +112,11 @@ fn main() {
                     },
                 },
             },
+            ObjPlugin,
         ))
-        .insert_resource(HoverPos::default())
-        .insert_resource(Map::default())
+        .insert_resource(World::default())
         .insert_resource(Inventory::default())
-        .add_systems(Startup, (setup, setup_map, setup_ui))
-        .add_systems(Update, (update_camera, update_hover, update_ui))
+        .add_systems(Startup, (setup, setup_world, setup_ui, cursor_grab))
+        .add_systems(Update, (update_camera, update_ui))
         .run();
 }
