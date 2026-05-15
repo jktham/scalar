@@ -1,7 +1,7 @@
 use crate::{
-    inventory::Inventory,
+    inventory::{Inventory, ItemStack},
     ui::{setup_ui, update_ui},
-    world::{ResourceNode, World, setup_world},
+    world::{ResourceNode, setup_world},
 };
 use bevy::{
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
@@ -86,9 +86,15 @@ fn update_camera(
 fn update_interact(
     camera_query: Single<(&Camera, &GlobalTransform)>,
     mouse_input: Res<ButtonInput<MouseButton>>,
-    mut nodes_query: Query<(&mut ResourceNode, &MeshMaterial3d<StandardMaterial>)>,
+    mut nodes: Query<
+        (
+            &Transform,
+            &mut ItemStack,
+            &MeshMaterial3d<StandardMaterial>,
+        ),
+        With<ResourceNode>,
+    >,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    world: Res<World>,
     mut inventory: ResMut<Inventory>,
 ) {
     let (_camera, camera_transform) = *camera_query;
@@ -100,22 +106,22 @@ fn update_interact(
         RANGE,
     );
 
-    for node_entity in &world.nodes {
-        if let Ok((mut node, material_handle)) = nodes_query.get_mut(*node_entity) {
-            let target = BoundingSphere::new(node.pos, 1.0);
-            if let Some(_dist) = ray.sphere_intersection_at(&target) {
-                if let Some(material) = materials.get_mut(&material_handle.0) {
-                    material.emissive = LinearRgba::new(0.3, 0.3, 0.3, 1.0);
-                }
+    for node in nodes.iter_mut() {
+        let (transform, mut stack, material_handle) = node;
+        let target = BoundingSphere::new(transform.translation, 1.0);
 
-                if mouse_input.just_pressed(MouseButton::Left) && node.stack.count > 0 {
-                    node.stack.count -= 1;
-                    inventory.add(&node.stack.item, 1);
-                }
-            } else {
-                if let Some(material) = materials.get_mut(&material_handle.0) {
-                    material.emissive = LinearRgba::BLACK;
-                }
+        if let Some(_dist) = ray.sphere_intersection_at(&target) {
+            if let Some(material) = materials.get_mut(&material_handle.0) {
+                material.emissive = LinearRgba::new(0.3, 0.3, 0.3, 1.0);
+            }
+
+            if mouse_input.just_pressed(MouseButton::Left) && stack.count > 0 {
+                stack.count -= 1;
+                inventory.add(&stack.item, 1);
+            }
+        } else {
+            if let Some(material) = materials.get_mut(&material_handle.0) {
+                material.emissive = LinearRgba::BLACK;
             }
         }
     }
@@ -153,7 +159,6 @@ fn main() {
             },
             ObjPlugin,
         ))
-        .insert_resource(World::default())
         .insert_resource(Inventory::default())
         .add_systems(Startup, (setup, setup_world, setup_ui, cursor_grab))
         .add_systems(Update, (update_camera, update_interact, update_ui))

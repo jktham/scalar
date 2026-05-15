@@ -15,7 +15,7 @@ impl Item {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Component, Debug, Hash, PartialEq, Eq, Clone)]
 pub struct ItemStack {
     pub item: Item,
     pub count: i32,
