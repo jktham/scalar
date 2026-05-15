@@ -14,21 +14,15 @@ pub fn setup_world(
     asset_server: Res<AssetServer>,
 ) {
     // terrain
-    let world_mesh = asset_server.load("world_mesh.obj");
-    let world_texture = asset_server.load("world_mesh.png");
+    let terrain = asset_server.load::<Scene>("terrain.glb#Scene0");
 
     commands.spawn((
-        Mesh3d(world_mesh),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: Some(world_texture),
-            reflectance: 0.0,
-            ..default()
-        })),
+        SceneRoot(terrain),
         Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
     ));
 
     // resource nodes
-    let mesh_handle_cube = meshes.add(Cuboid::new(0.5, 0.5, 0.5));
+    let cube_mesh = meshes.add(Cuboid::new(0.5, 0.5, 0.5));
 
     let mut rng = rng();
     for _ in 0..100 {
@@ -55,7 +49,7 @@ pub fn setup_world(
         commands.spawn((
             ResourceNode,
             stack,
-            Mesh3d(mesh_handle_cube.clone()),
+            Mesh3d(cube_mesh.clone()),
             MeshMaterial3d(material_handle),
             transform,
         ));
