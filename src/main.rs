@@ -1,6 +1,6 @@
 use crate::{
     inventory::{Inventory, ItemStack},
-    ui::{setup_ui, update_ui},
+    ui::{ActionText, setup_ui, update_ui},
     world::{ResourceNode, setup_world},
 };
 use bevy::{
@@ -83,19 +83,12 @@ fn update_camera(
     camera_transform.translation += movement * speed * time.delta().as_secs_f32();
 }
 
-fn update_interact(
+fn mine_node(
     camera_query: Single<(&Camera, &GlobalTransform)>,
     mouse_input: Res<ButtonInput<MouseButton>>,
-    mut nodes: Query<
-        (
-            &Transform,
-            &mut ItemStack,
-            &MeshMaterial3d<StandardMaterial>,
-        ),
-        With<ResourceNode>,
-    >,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut nodes: Query<(&Transform, &mut ItemStack), With<ResourceNode>>,
     mut inventory: ResMut<Inventory>,
+    mut action_text: Single<&mut Text, With<ActionText>>,
 ) {
     let (_camera, camera_transform) = *camera_query;
 
@@ -106,24 +99,28 @@ fn update_interact(
         RANGE,
     );
 
-    for node in nodes.iter_mut() {
-        let (transform, mut stack, material_handle) = node;
-        let target = BoundingSphere::new(transform.translation, 1.0);
+    let mut min_dist = RANGE;
+    let mut target = None;
 
-        if let Some(_dist) = ray.sphere_intersection_at(&target) {
-            if let Some(material) = materials.get_mut(&material_handle.0) {
-                material.emissive = LinearRgba::new(0.3, 0.3, 0.3, 1.0);
-            }
+    for (transform, stack) in nodes.iter_mut() {
+        let bound = BoundingSphere::new(transform.translation, 0.5);
 
-            if mouse_input.just_pressed(MouseButton::Left) && stack.count > 0 {
-                stack.count -= 1;
-                inventory.add(&stack.item, 1);
-            }
-        } else {
-            if let Some(material) = materials.get_mut(&material_handle.0) {
-                material.emissive = LinearRgba::BLACK;
+        if let Some(dist) = ray.sphere_intersection_at(&bound) {
+            if dist < min_dist {
+                min_dist = dist;
+                target = Some(stack);
             }
         }
+    }
+
+    if let Some(mut stack) = target {
+        action_text.0 = String::from(format!("{:?} node ({})", &stack.item, &stack.count));
+        if mouse_input.just_pressed(MouseButton::Left) && stack.count > 0 {
+            stack.count -= 1;
+            inventory.add(&stack.item, 1);
+        }
+    } else {
+        action_text.0 = String::from("");
     }
 }
 
@@ -161,6 +158,6 @@ fn main() {
         ))
         .insert_resource(Inventory::default())
         .add_systems(Startup, (setup, setup_world, setup_ui, cursor_grab))
-        .add_systems(Update, (update_camera, update_interact, update_ui))
+        .add_systems(Update, (update_camera, mine_node, update_ui))
         .run();
 }
