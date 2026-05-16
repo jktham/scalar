@@ -3,7 +3,13 @@ use bevy::prelude::*;
 use rand::{Rng, rng};
 
 #[derive(Component)]
-pub struct ResourceNode;
+pub struct Node;
+
+#[derive(Component)]
+pub struct Tree;
+
+#[derive(Component)]
+pub struct Stump;
 
 const WORLD_SIZE: f32 = 100.0;
 
@@ -48,6 +54,25 @@ pub fn setup_world(
         } else {
             asset_server.load::<Scene>("node_copper.glb#Scene0")
         };
-        commands.spawn((ResourceNode, stack, SceneRoot(node.clone()), transform));
+        commands.spawn((Node, stack, SceneRoot(node.clone()), transform));
+    }
+
+    // trees
+    for _ in 0..100 {
+        let pos = vec3(
+            rng.random::<f32>() * WORLD_SIZE - WORLD_SIZE / 2.0,
+            0.0,
+            rng.random::<f32>() * WORLD_SIZE - WORLD_SIZE / 2.0,
+        );
+        let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
+
+        let stack = ItemStack {
+            item: Item::Wood,
+            count: 10,
+        };
+
+        let transform = Transform::from_translation(pos).with_rotation(rot);
+        let node = asset_server.load::<Scene>("tree.glb#Scene0");
+        commands.spawn((Tree, stack, SceneRoot(node.clone()), transform));
     }
 }

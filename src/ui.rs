@@ -5,7 +5,7 @@ use bevy::prelude::*;
 pub struct InventoryText;
 
 #[derive(Component)]
-pub struct ActionText;
+pub struct TargetText;
 
 #[derive(Component)]
 pub struct Crosshair;
@@ -53,7 +53,7 @@ pub fn setup_ui(mut commands: Commands) {
             },
             ..default()
         },
-        ActionText,
+        TargetText,
     ));
 }
 

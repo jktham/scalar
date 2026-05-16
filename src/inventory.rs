@@ -4,6 +4,7 @@ use bevy::prelude::*;
 pub enum Item {
     Iron,
     Copper,
+    Wood,
 }
 
 impl Item {
@@ -11,6 +12,7 @@ impl Item {
         match self {
             Item::Iron => Color::srgb(0.0, 0.0, 1.0),
             Item::Copper => Color::srgb(1.0, 0.0, 0.0),
+            Item::Wood => Color::srgb(0.5, 0.25, 0.0),
         }
     }
 }

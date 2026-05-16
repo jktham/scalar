@@ -1,12 +1,12 @@
 use crate::{
     inventory::{Inventory, ItemStack},
-    ui::{ActionText, setup_ui, update_ui},
-    world::{ResourceNode, setup_world},
+    ui::{TargetText, setup_ui, update_ui},
+    world::{Node, Stump, Tree, setup_world},
 };
 use bevy::{
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
     input::mouse::AccumulatedMouseMotion,
-    math::bounding::{BoundingSphere, RayCast3d},
+    math::bounding::{Aabb3d, BoundingSphere, RayCast3d},
     prelude::*,
     render::view::NoIndirectDrawing,
     window::{CursorGrabMode, CursorOptions, PresentMode, WindowResolution},
@@ -83,12 +83,15 @@ fn update_camera(
     camera_transform.translation += movement * speed * time.delta().as_secs_f32();
 }
 
-fn mine_node(
+fn mine_resource(
     camera_query: Single<(&Camera, &GlobalTransform)>,
     mouse_input: Res<ButtonInput<MouseButton>>,
-    mut nodes: Query<(&Transform, &mut ItemStack), With<ResourceNode>>,
+    mut nodes: Query<(&Transform, &mut ItemStack, Entity), (With<Node>, Without<Tree>)>,
+    mut trees: Query<(&Transform, &mut ItemStack, Entity), (With<Tree>, Without<Node>)>,
     mut inventory: ResMut<Inventory>,
-    mut action_text: Single<&mut Text, With<ActionText>>,
+    mut target_text: Single<&mut Text, With<TargetText>>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
 ) {
     let (_camera, camera_transform) = *camera_query;
 
@@ -99,28 +102,66 @@ fn mine_node(
         RANGE,
     );
 
+    #[derive(PartialEq)]
+    enum TargetType {
+        Node,
+        Tree,
+    }
+
     let mut min_dist = RANGE;
     let mut target = None;
 
-    for (transform, stack) in nodes.iter_mut() {
-        let bound = BoundingSphere::new(transform.translation, 0.5);
+    for (transform, stack, entity) in nodes.iter_mut() {
+        const RADIUS: f32 = 0.5;
+        let bsphere = BoundingSphere::new(transform.translation, RADIUS);
 
-        if let Some(dist) = ray.sphere_intersection_at(&bound) {
+        if let Some(dist) = ray.sphere_intersection_at(&bsphere) {
             if dist < min_dist {
                 min_dist = dist;
-                target = Some(stack);
+                target = Some((transform, stack, entity, TargetType::Node));
             }
         }
     }
 
-    if let Some(mut stack) = target {
-        action_text.0 = String::from(format!("{:?} node ({})", &stack.item, &stack.count));
+    for (transform, stack, entity) in trees.iter_mut() {
+        const WIDTH: f32 = 0.3;
+        let bbox = Aabb3d::from_min_max(
+            transform.translation - Vec3::new(WIDTH, 0.0, WIDTH),
+            transform.translation + Vec3::new(WIDTH, 4.0, WIDTH),
+        );
+
+        if let Some(dist) = ray.aabb_intersection_at(&bbox) {
+            if dist < min_dist {
+                min_dist = dist;
+                target = Some((transform, stack, entity, TargetType::Tree));
+            }
+        }
+    }
+
+    if let Some((transform, mut stack, entity, target_type)) = target {
+        if target_type == TargetType::Tree {
+            target_text.0 = String::from(format!("Tree ({})", &stack.count));
+        } else if target_type == TargetType::Node {
+            target_text.0 = String::from(format!("{:?} node ({})", &stack.item, &stack.count));
+        } else {
+            target_text.0 = String::from("unknown");
+        }
+
         if mouse_input.just_pressed(MouseButton::Left) && stack.count > 0 {
             stack.count -= 1;
             inventory.add(&stack.item, 1);
+
+            if target_type == TargetType::Tree && stack.count == 0 {
+                commands.entity(entity).despawn();
+                commands.spawn((
+                    Stump,
+                    SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
+                    *transform,
+                ));
+            }
         }
     } else {
-        action_text.0 = String::from("");
+        target_text.0 = String::from("");
     }
 }
 
@@ -158,6 +199,6 @@ fn main() {
         ))
         .insert_resource(Inventory::default())
         .add_systems(Startup, (setup, setup_world, setup_ui, cursor_grab))
-        .add_systems(Update, (update_camera, mine_node, update_ui))
+        .add_systems(Update, (update_camera, mine_resource, update_ui))
         .run();
 }
