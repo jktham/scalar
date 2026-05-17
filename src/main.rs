@@ -4,11 +4,12 @@ use crate::{
     world::{Node, Stump, Tree, setup_world},
 };
 use bevy::{
+    anti_alias::taa::TemporalAntiAliasing,
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
     input::mouse::AccumulatedMouseMotion,
     math::bounding::{Aabb3d, BoundingSphere, RayCast3d},
+    pbr::ScreenSpaceAmbientOcclusion,
     prelude::*,
-    render::view::NoIndirectDrawing,
     window::{CursorGrabMode, CursorOptions, PresentMode, WindowResolution},
 };
 use bevy_obj::ObjPlugin;
@@ -20,7 +21,7 @@ mod world;
 fn setup(mut commands: Commands) {
     commands.spawn((
         DirectionalLight {
-            shadows_enabled: false,
+            shadows_enabled: true,
             illuminance: 2000.0,
             ..default()
         },
@@ -29,7 +30,10 @@ fn setup(mut commands: Commands) {
 
     commands.spawn((
         Camera3d::default(),
-        NoIndirectDrawing,
+        // NoIndirectDrawing,
+        ScreenSpaceAmbientOcclusion::default(),
+        Msaa::Off,
+        TemporalAntiAliasing::default(),
         Transform::from_xyz(0.0, 2.0, 0.0).looking_to(Vec3::new(1.0, 0.0, 0.0), Vec3::Y),
     ));
 }
