@@ -17,9 +17,18 @@ pub fn get_terrain_height(x: f32, z: f32) -> f32 {
     f32::sin(x * 0.3) * f32::cos(z * 0.3) * 1.0
 }
 
-const WORLD_SIZE: f32 = 100.0;
+const N_CHUNKS: i32 = 9;
+const N_TILES_X: i32 = 10; // should be even
+const N_TILES_Z: i32 = 18;
+const TILE_RADIUS: f32 = 1.0;
 
-pub fn generate_terrain() -> Mesh {
+const CHUNK_SIZE_X: f32 = N_TILES_X as f32 * TILE_RADIUS * 3.0 / 2.0;
+const CHUNK_SIZE_Z: f32 =
+    N_TILES_Z as f32 * TILE_RADIUS - 1.34 * TILE_RADIUS * N_TILES_Z as f32 / 10.0;
+const WORLD_SIZE_X: f32 = (N_CHUNKS - 1) as f32 * CHUNK_SIZE_X;
+const WORLD_SIZE_Z: f32 = (N_CHUNKS - 1) as f32 * CHUNK_SIZE_Z;
+
+pub fn generate_terrain_chunk(cx: f32, cz: f32) -> Mesh {
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
@@ -29,39 +38,33 @@ pub fn generate_terrain() -> Mesh {
     let mut normals = Vec::new();
     let mut colors = Vec::new();
 
-    const TRIANGLE_RADIUS: f32 = 1.0;
-    const N_X: i32 = (WORLD_SIZE / (TRIANGLE_RADIUS * 1.5)) as i32;
-    const N_Z: i32 = (N_X as f32 * 1.8) as i32;
-    const INITIAL_OFFSET: Vec3 = Vec3::new(
-        -N_X as f32 * 3.0 / 2.0 * TRIANGLE_RADIUS / 2.0,
-        0.0,
-        -N_Z as f32 * 0.866 * TRIANGLE_RADIUS / 2.0,
-    );
+    let initial_offset: Vec3 =
+        Vec3::new(-CHUNK_SIZE_X / 2.0, 0.0, -CHUNK_SIZE_Z / 2.0) + Vec3::new(cx, 0.0, cz);
+    let mut offset = initial_offset;
 
-    let mut offset = INITIAL_OFFSET;
-    for ix in 0..N_X {
-        offset.x += 3.0 / 2.0 * TRIANGLE_RADIUS;
-        offset.z = INITIAL_OFFSET.z;
+    for ix in 0..N_TILES_X {
+        offset.x += 3.0 / 2.0 * TILE_RADIUS;
+        offset.z = initial_offset.z;
 
-        for iz in 0..N_Z {
-            offset.z += f32::sin(2.0 / 3.0 * PI) * TRIANGLE_RADIUS;
+        for iz in 0..N_TILES_Z {
+            offset.z += f32::sin(2.0 / 3.0 * PI) * TILE_RADIUS;
 
             let odd = (ix + iz) % 2 == 1;
             let mut center = offset;
             if odd {
-                center -= Vec3::new(TRIANGLE_RADIUS / 2.0, 0.0, 0.0);
+                center -= Vec3::new(TILE_RADIUS / 2.0, 0.0, 0.0);
             }
 
             let mut v0 =
-                center + Vec3::new(1.0, 0.0, 0.0) * if odd { 1.0 } else { -1.0 } * TRIANGLE_RADIUS;
+                center + Vec3::new(1.0, 0.0, 0.0) * if odd { 1.0 } else { -1.0 } * TILE_RADIUS;
             let mut v1 = center
                 + Vec3::new(f32::cos(2.0 / 3.0 * PI), 0.0, f32::sin(2.0 / 3.0 * PI))
                     * if odd { 1.0 } else { -1.0 }
-                    * TRIANGLE_RADIUS;
+                    * TILE_RADIUS;
             let mut v2 = center
                 + Vec3::new(f32::cos(4.0 / 3.0 * PI), 0.0, f32::sin(4.0 / 3.0 * PI))
                     * if odd { 1.0 } else { -1.0 }
-                    * TRIANGLE_RADIUS;
+                    * TILE_RADIUS;
 
             v0.y = get_terrain_height(v0.x, v0.z);
             v1.y = get_terrain_height(v1.x, v1.z);
@@ -96,6 +99,19 @@ pub fn generate_terrain() -> Mesh {
     mesh
 }
 
+pub fn generate_terrain() -> Vec<Mesh> {
+    let mut chunks = Vec::new();
+    for icx in 0..N_CHUNKS {
+        for icz in 0..N_CHUNKS {
+            chunks.push(generate_terrain_chunk(
+                icx as f32 * CHUNK_SIZE_X - WORLD_SIZE_X / 2.0,
+                icz as f32 * CHUNK_SIZE_Z - WORLD_SIZE_Z / 2.0,
+            ));
+        }
+    }
+    chunks
+}
+
 pub fn setup_world(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -103,24 +119,27 @@ pub fn setup_world(
     asset_server: Res<AssetServer>,
 ) {
     // terrain
-    let terrain_mesh = meshes.add(generate_terrain());
-    let terrain_material = materials.add(StandardMaterial {
-        reflectance: 0.0,
-        ..default()
-    });
-    commands.spawn((
-        Mesh3d(terrain_mesh),
-        MeshMaterial3d(terrain_material),
-        Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
-    ));
+    let chunk_meshes = generate_terrain();
+    for mesh in chunk_meshes {
+        let terrain_mesh = meshes.add(mesh);
+        let terrain_material = materials.add(StandardMaterial {
+            reflectance: 0.0,
+            ..default()
+        });
+        commands.spawn((
+            Mesh3d(terrain_mesh),
+            MeshMaterial3d(terrain_material),
+            Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+        ));
+    }
 
     // resource nodes
     let mut rng = rng();
     for _ in 0..100 {
         let mut pos = vec3(
-            rng.random::<f32>() * WORLD_SIZE - WORLD_SIZE / 2.0,
+            rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
-            rng.random::<f32>() * WORLD_SIZE - WORLD_SIZE / 2.0,
+            rng.random::<f32>() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
         );
         pos.y = get_terrain_height(pos.x, pos.z);
         let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
@@ -149,9 +168,9 @@ pub fn setup_world(
     // trees
     for _ in 0..100 {
         let mut pos = vec3(
-            rng.random::<f32>() * WORLD_SIZE - WORLD_SIZE / 2.0,
+            rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
-            rng.random::<f32>() * WORLD_SIZE - WORLD_SIZE / 2.0,
+            rng.random::<f32>() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
         );
         pos.y = get_terrain_height(pos.x, pos.z) - 0.1;
         let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
