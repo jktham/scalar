@@ -10,8 +10,6 @@ use bevy_obj::ObjPlugin;
 use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 
-use crate::player::Player;
-
 mod inventory;
 mod player;
 mod ui;
@@ -98,7 +96,8 @@ fn main() {
             Update,
             (
                 player::update_movement.in_set(TnuaUserControlsSystems),
-                player::mine_resource,
+                player::update_hover,
+                player::update_interact,
                 ui::update_ui,
             ),
         )

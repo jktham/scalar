@@ -118,45 +118,59 @@ pub fn update_movement(
     camera_transform.translation = player_transform.translation + Vec3::new(0.0, 1.2, 0.0);
 }
 
-pub fn mine_resource(
-    camera_rayhits: Single<&RayHits, With<Camera>>,
-    player: Single<Entity, With<Player>>,
-    mut nodes: Query<&mut ItemStack, (With<Node>, Without<Tree>)>,
-    mut trees: Query<(&Transform, &mut ItemStack), (With<Tree>, Without<Node>)>,
-    mut inventory: Single<&mut Inventory, With<Player>>,
-    mut target_text: Single<&mut Text, With<TargetText>>,
-    mouse_input: Res<ButtonInput<MouseButton>>,
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
-    const RANGE: f32 = 6.0;
-
-    // get closest hit
-    let mut target = None;
-    for hit in camera_rayhits.iter_sorted() {
-        if hit.distance > RANGE || hit.entity == player.entity() {
+const RANGE: f32 = 6.0;
+/// get closest hit within range, ignoring specified entities
+fn get_closest_hit(rayhits: &RayHits, ignored: Vec<Entity>) -> Option<Entity> {
+    let mut target: Option<Entity> = None;
+    for hit in rayhits.iter_sorted() {
+        if hit.distance > RANGE || ignored.contains(&hit.entity) {
             continue;
         }
         target = Some(hit.entity);
         break;
     }
+    target
+}
 
-    // update target text and mine if left mouse button is pressed
+pub fn update_hover(
+    camera_rayhits: Single<&RayHits, With<Camera>>,
+    player: Single<Entity, With<Player>>,
+    nodes: Query<&ItemStack, (With<Node>, Without<Tree>)>,
+    trees: Query<&ItemStack, (With<Tree>, Without<Node>)>,
+    mut target_text: Single<&mut Text, With<TargetText>>,
+) {
+    let target = get_closest_hit(&camera_rayhits, vec![player.entity()]);
+
     target_text.0 = String::from("");
     if let Some(entity) = target {
-        let node = nodes.get_mut(entity);
-        let tree = trees.get_mut(entity);
-
-        if let Ok(mut stack) = node {
+        if let Ok(stack) = nodes.get(entity) {
             target_text.0 = String::from(format!("{:?} node ({})", &stack.item, &stack.count));
+        } else if let Ok(stack) = trees.get(entity) {
+            target_text.0 = String::from(format!("Tree ({})", &stack.count));
+        }
+    }
+}
 
+pub fn update_interact(
+    camera_rayhits: Single<&RayHits, With<Camera>>,
+    player: Single<Entity, With<Player>>,
+    mut nodes: Query<&mut ItemStack, (With<Node>, Without<Tree>)>,
+    mut trees: Query<(&Transform, &mut ItemStack), (With<Tree>, Without<Node>)>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    mut inventory: Single<&mut Inventory, With<Player>>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    let target = get_closest_hit(&camera_rayhits, vec![player.entity()]);
+
+    // mine resource if left mouse button is pressed
+    if let Some(entity) = target {
+        if let Ok(mut stack) = nodes.get_mut(entity) {
             if mouse_input.just_pressed(MouseButton::Left) && stack.count > 0 {
                 stack.count -= 1;
                 inventory.add(&stack.item, 1);
             }
-        } else if let Ok((transform, mut stack)) = tree {
-            target_text.0 = String::from(format!("Tree ({})", &stack.count));
-
+        } else if let Ok((transform, mut stack)) = trees.get_mut(entity) {
             if mouse_input.just_pressed(MouseButton::Left) && stack.count > 0 {
                 stack.count -= 1;
                 inventory.add(&stack.item, 1);
