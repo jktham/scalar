@@ -1,20 +1,19 @@
-use crate::{
-    inventory::{Inventory, ItemStack},
-    ui::{TargetText, setup_ui, update_ui},
-    world::{Node, Stump, Tree, setup_world},
-};
+use avian3d::prelude::*;
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
-    input::mouse::AccumulatedMouseMotion,
-    math::bounding::{Aabb3d, BoundingSphere, RayCast3d},
     pbr::ScreenSpaceAmbientOcclusion,
     prelude::*,
     window::{CursorGrabMode, CursorOptions, PresentMode, WindowResolution},
 };
 use bevy_obj::ObjPlugin;
+use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
+use bevy_tnua_avian3d::TnuaAvian3dPlugin;
+
+use crate::player::Player;
 
 mod inventory;
+mod player;
 mod ui;
 mod world;
 
@@ -34,7 +33,9 @@ fn setup(mut commands: Commands) {
         ScreenSpaceAmbientOcclusion::default(),
         Msaa::Off,
         TemporalAntiAliasing::default(),
-        Transform::from_xyz(0.0, 2.0, 0.0).looking_to(Vec3::new(1.0, 0.0, 0.0), Vec3::Y),
+        Transform::from_xyz(0.0, 0.0, 0.0).looking_to(Vec3::new(1.0, 0.0, 0.0), Vec3::Y),
+        RayCaster::new(Vec3::ZERO, -Dir3::Z).with_max_distance(10.0),
+        RayHits::default(),
     ));
 }
 
@@ -46,127 +47,6 @@ fn cursor_grab(mut cursor_options: Single<&mut CursorOptions>) {
 fn cursor_ungrab(mut cursor_options: Single<&mut CursorOptions>) {
     cursor_options.grab_mode = CursorGrabMode::None;
     cursor_options.visible = true;
-}
-
-fn update_camera(
-    mut camera_transform: Single<&mut Transform, With<Camera>>,
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-    mouse_motion: Res<AccumulatedMouseMotion>,
-    time: Res<Time>,
-) {
-    let left = Vec3::Y
-        .cross(camera_transform.forward().as_vec3())
-        .normalize();
-    let front = left.cross(Vec3::Y).normalize(); // in plane
-
-    const SENSITIVITY: f32 = 0.001;
-    camera_transform.rotation = Quat::from_rotation_y(-mouse_motion.delta.x * SENSITIVITY)
-        * Quat::from_axis_angle(left, mouse_motion.delta.y * SENSITIVITY)
-        * camera_transform.rotation; // TODO: prevent flipping over pole
-
-    let mut movement = Vec3::ZERO;
-    if keyboard_input.pressed(KeyCode::KeyA) {
-        movement += left;
-    }
-    if keyboard_input.pressed(KeyCode::KeyD) {
-        movement -= left;
-    }
-    if keyboard_input.pressed(KeyCode::KeyW) {
-        movement += front;
-    }
-    if keyboard_input.pressed(KeyCode::KeyS) {
-        movement -= front;
-    }
-
-    const SPEED: f32 = 8.0;
-    let mut speed = SPEED;
-    if keyboard_input.pressed(KeyCode::ShiftLeft) {
-        speed *= 2.0;
-    }
-
-    camera_transform.translation += movement * speed * time.delta().as_secs_f32();
-}
-
-fn mine_resource(
-    camera_query: Single<(&Camera, &GlobalTransform)>,
-    mouse_input: Res<ButtonInput<MouseButton>>,
-    mut nodes: Query<(&Transform, &mut ItemStack, Entity), (With<Node>, Without<Tree>)>,
-    mut trees: Query<(&Transform, &mut ItemStack, Entity), (With<Tree>, Without<Node>)>,
-    mut inventory: ResMut<Inventory>,
-    mut target_text: Single<&mut Text, With<TargetText>>,
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
-    let (_camera, camera_transform) = *camera_query;
-
-    const RANGE: f32 = 3.0;
-    let ray = RayCast3d::new(
-        camera_transform.translation(),
-        camera_transform.forward(),
-        RANGE,
-    );
-
-    #[derive(PartialEq)]
-    enum TargetType {
-        Node,
-        Tree,
-    }
-
-    let mut min_dist = RANGE;
-    let mut target = None;
-
-    for (transform, stack, entity) in nodes.iter_mut() {
-        const RADIUS: f32 = 0.5;
-        let bsphere = BoundingSphere::new(transform.translation, RADIUS);
-
-        if let Some(dist) = ray.sphere_intersection_at(&bsphere) {
-            if dist < min_dist {
-                min_dist = dist;
-                target = Some((transform, stack, entity, TargetType::Node));
-            }
-        }
-    }
-
-    for (transform, stack, entity) in trees.iter_mut() {
-        const WIDTH: f32 = 0.3;
-        let bbox = Aabb3d::from_min_max(
-            transform.translation - Vec3::new(WIDTH, 0.0, WIDTH),
-            transform.translation + Vec3::new(WIDTH, 4.0, WIDTH),
-        );
-
-        if let Some(dist) = ray.aabb_intersection_at(&bbox) {
-            if dist < min_dist {
-                min_dist = dist;
-                target = Some((transform, stack, entity, TargetType::Tree));
-            }
-        }
-    }
-
-    if let Some((transform, mut stack, entity, target_type)) = target {
-        if target_type == TargetType::Tree {
-            target_text.0 = String::from(format!("Tree ({})", &stack.count));
-        } else if target_type == TargetType::Node {
-            target_text.0 = String::from(format!("{:?} node ({})", &stack.item, &stack.count));
-        } else {
-            target_text.0 = String::from("unknown");
-        }
-
-        if mouse_input.just_pressed(MouseButton::Left) && stack.count > 0 {
-            stack.count -= 1;
-            inventory.add(&stack.item, 1);
-
-            if target_type == TargetType::Tree && stack.count == 0 {
-                commands.entity(entity).despawn();
-                commands.spawn((
-                    Stump,
-                    SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
-                    *transform,
-                ));
-            }
-        }
-    } else {
-        target_text.0 = String::from("");
-    }
 }
 
 fn main() {
@@ -200,9 +80,27 @@ fn main() {
                 },
             },
             ObjPlugin,
+            PhysicsPlugins::default(),
+            TnuaControllerPlugin::<player::ControlScheme>::new(FixedUpdate),
+            TnuaAvian3dPlugin::new(FixedUpdate),
         ))
-        .insert_resource(Inventory::default())
-        .add_systems(Startup, (setup, setup_world, setup_ui, cursor_grab))
-        .add_systems(Update, (update_camera, mine_resource, update_ui))
+        .add_systems(
+            Startup,
+            (
+                setup,
+                cursor_grab,
+                player::setup_player,
+                world::setup_world,
+                ui::setup_ui,
+            ),
+        )
+        .add_systems(
+            Update,
+            (
+                player::update_movement.in_set(TnuaUserControlsSystems),
+                player::mine_resource,
+                ui::update_ui,
+            ),
+        )
         .run();
 }

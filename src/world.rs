@@ -1,8 +1,16 @@
 use std::f32::consts::PI;
 
 use crate::inventory::{Item, ItemStack};
-use bevy::{asset::RenderAssetUsages, mesh::PrimitiveTopology, prelude::*};
-use rand::{Rng, rng};
+use avian3d::{
+    collision::collider::{Collider, ColliderConstructor},
+    dynamics::rigid_body::RigidBody,
+};
+use bevy::{
+    asset::RenderAssetUsages,
+    mesh::{Indices, PrimitiveTopology},
+    prelude::*,
+};
+use rand::Rng;
 
 #[derive(Component)]
 pub struct Node;
@@ -92,9 +100,11 @@ pub fn generate_terrain_chunk(cx: f32, cz: f32) -> Mesh {
         }
     }
 
+    let n_verts = vertices.len();
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+    mesh.insert_indices(Indices::U16((0..n_verts).map(|i| i as u16).collect()));
 
     mesh
 }
@@ -121,20 +131,23 @@ pub fn setup_world(
     // terrain
     let chunk_meshes = generate_terrain();
     for mesh in chunk_meshes {
-        let terrain_mesh = meshes.add(mesh);
+        let terrain_mesh = meshes.add(mesh.clone());
         let terrain_material = materials.add(StandardMaterial {
             reflectance: 0.0,
             ..default()
         });
+
         commands.spawn((
             Mesh3d(terrain_mesh),
             MeshMaterial3d(terrain_material),
-            Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+            RigidBody::Static,
+            ColliderConstructor::TrimeshFromMesh,
+            Transform::from_xyz(0.0, 0.0, 0.0),
         ));
     }
 
     // resource nodes
-    let mut rng = rng();
+    let mut rng = rand::rng();
     for _ in 0..100 {
         let mut pos = vec3(
             rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
@@ -162,7 +175,14 @@ pub fn setup_world(
         } else {
             asset_server.load::<Scene>("node_copper.glb#Scene0")
         };
-        commands.spawn((Node, stack, SceneRoot(node.clone()), transform));
+        commands.spawn((
+            Node,
+            stack,
+            SceneRoot(node.clone()),
+            transform,
+            RigidBody::Static,
+            Collider::sphere(0.5),
+        ));
     }
 
     // trees
@@ -182,6 +202,13 @@ pub fn setup_world(
 
         let transform = Transform::from_translation(pos).with_rotation(rot);
         let node = asset_server.load::<Scene>("tree.glb#Scene0");
-        commands.spawn((Tree, stack, SceneRoot(node.clone()), transform));
+        commands.spawn((
+            Tree,
+            stack,
+            SceneRoot(node.clone()),
+            transform,
+            RigidBody::Static,
+            Collider::cylinder(0.3, 8.0),
+        ));
     }
 }

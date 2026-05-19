@@ -8,7 +8,7 @@ pub enum Item {
 }
 
 impl Item {
-    pub fn color(&self) -> Color {
+    pub fn _color(&self) -> Color {
         match self {
             Item::Iron => Color::srgb(0.0, 0.0, 1.0),
             Item::Copper => Color::srgb(1.0, 0.0, 0.0),
@@ -23,7 +23,7 @@ pub struct ItemStack {
     pub count: i32,
 }
 
-#[derive(Resource, Default, Debug)]
+#[derive(Component, Default, Debug)]
 pub struct Inventory {
     pub stacks: Vec<ItemStack>,
 }

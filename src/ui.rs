@@ -1,4 +1,4 @@
-use crate::inventory::Inventory;
+use crate::{inventory::Inventory, player::Player};
 use bevy::prelude::*;
 
 #[derive(Component)]
@@ -58,7 +58,7 @@ pub fn setup_ui(mut commands: Commands) {
 }
 
 pub fn update_ui(
-    inventory: Res<Inventory>,
+    inventory: Single<&Inventory, With<Player>>,
     mut inventory_text: Single<&mut Text, With<InventoryText>>,
 ) {
     let mut text = String::from("Inventory\n");
