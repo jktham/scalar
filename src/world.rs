@@ -10,7 +10,10 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
-use rand::Rng;
+use rand::{Rng, SeedableRng, rngs::StdRng};
+
+#[derive(Component)]
+pub struct Terrain;
 
 #[derive(Component)]
 pub struct Node;
@@ -21,20 +24,67 @@ pub struct Tree;
 #[derive(Component)]
 pub struct Stump;
 
+fn smoothstep(a: f32, b: f32, w: f32) -> f32 {
+    return (b - a) * (3.0 - w * 2.0) * w * w + a;
+}
+
+fn random_gradient(ix: i32, iy: i32) -> Vec2 {
+    let seed: u64 = (ix as u64).strict_shl(32) | iy as u64;
+    let mut prng = StdRng::seed_from_u64(seed);
+
+    let r = prng.random::<f32>() * PI * 2.0; // [0, 2*pi)
+    return Vec2::new(f32::cos(r), f32::sin(r)); // [-1, 1]
+}
+
+fn dot_grid_gradient(ix: i32, iy: i32, x: f32, y: f32) -> f32 {
+    let gradient = random_gradient(ix, iy);
+    let dx = x - ix as f32;
+    let dy = y - iy as f32;
+    return dx * gradient.x + dy * gradient.y;
+}
+
+/// perlin noise implementation stolen from https://en.wikipedia.org/w/index.php?title=Perlin_noise&oldid=1230993513 <3
+// TODO: negative coordinates
+pub fn perlin(x: f32, y: f32) -> f32 {
+    // grid points
+    let x0 = x as i32;
+    let x1 = x0 + 1;
+    let y0 = y as i32;
+    let y1 = y0 + 1;
+
+    // interpolation weights
+    let sx = x - x0 as f32;
+    let sy = y - y0 as f32;
+
+    // interpolate between grid point gradients
+    let n0 = dot_grid_gradient(x0, y0, x, y);
+    let n1 = dot_grid_gradient(x1, y0, x, y);
+    let ix0 = smoothstep(n0, n1, sx);
+
+    let n2 = dot_grid_gradient(x0, y1, x, y);
+    let n3 = dot_grid_gradient(x1, y1, x, y);
+    let ix1 = smoothstep(n2, n3, sx);
+
+    return smoothstep(ix0, ix1, sy) * 0.5 + 0.5; // [0, 1]
+}
+
 pub fn get_terrain_height(x: f32, z: f32) -> f32 {
-    f32::sin(x * 0.3) * f32::cos(z * 0.3) * 1.0
+    let scale = 0.03;
+    let offset = 1000.0; // to avoid negative coordinates
+    let height = 20.0;
+    perlin(x * scale + offset, z * scale + offset) * height
 }
 
 const N_CHUNKS: i32 = 9;
-const N_TILES_X: i32 = 10; // should be even
-const N_TILES_Z: i32 = 18;
+const N_TILES_X: i32 = 20; // should be even
+const N_TILES_Z: i32 = 36;
 const TILE_RADIUS: f32 = 1.0;
 
 const CHUNK_SIZE_X: f32 = N_TILES_X as f32 * TILE_RADIUS * 3.0 / 2.0;
 const CHUNK_SIZE_Z: f32 =
     N_TILES_Z as f32 * TILE_RADIUS - 1.34 * TILE_RADIUS * N_TILES_Z as f32 / 10.0;
-const WORLD_SIZE_X: f32 = (N_CHUNKS - 1) as f32 * CHUNK_SIZE_X;
-const WORLD_SIZE_Z: f32 = (N_CHUNKS - 1) as f32 * CHUNK_SIZE_Z;
+const WORLD_SIZE_X: f32 = N_CHUNKS as f32 * CHUNK_SIZE_X;
+const WORLD_SIZE_Z: f32 = N_CHUNKS as f32 * CHUNK_SIZE_Z;
 
 pub fn generate_terrain_chunk(cx: f32, cz: f32) -> Mesh {
     let mut mesh = Mesh::new(
@@ -46,8 +96,7 @@ pub fn generate_terrain_chunk(cx: f32, cz: f32) -> Mesh {
     let mut normals = Vec::new();
     let mut colors = Vec::new();
 
-    let initial_offset: Vec3 =
-        Vec3::new(-CHUNK_SIZE_X / 2.0, 0.0, -CHUNK_SIZE_Z / 2.0) + Vec3::new(cx, 0.0, cz);
+    let initial_offset = Vec3::new(cx, 0.0, cz);
     let mut offset = initial_offset;
 
     for ix in 0..N_TILES_X {
@@ -138,6 +187,7 @@ pub fn setup_world(
         });
 
         commands.spawn((
+            Terrain,
             Mesh3d(terrain_mesh),
             MeshMaterial3d(terrain_material),
             RigidBody::Static,

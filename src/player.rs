@@ -1,7 +1,7 @@
 use crate::{
     inventory::{Inventory, ItemStack},
     ui::TargetText,
-    world::{Node, Stump, Tree},
+    world::{Node, Stump, Tree, get_terrain_height},
 };
 use avian3d::{
     collision::collider::Collider,
@@ -43,16 +43,19 @@ pub fn setup_player(
     mut commands: Commands,
     mut control_scheme_configs: ResMut<Assets<ControlSchemeConfig>>,
 ) {
+    let mut spawn_pos = Vec3::new(0.0, 0.0, 0.0);
+    spawn_pos.y = get_terrain_height(spawn_pos.x, spawn_pos.z) + 2.0;
+
     commands.spawn((
         Player::default(),
         Inventory::default(),
-        Transform::from_xyz(0.0, 2.0, 0.0),
+        Transform::from_translation(spawn_pos),
         RigidBody::Dynamic,
         Collider::capsule(0.5, 0.5),
         TnuaController::<ControlScheme>::default(),
         TnuaConfig::<ControlScheme>(control_scheme_configs.add(ControlSchemeConfig {
             basis: TnuaBuiltinWalkConfig {
-                float_height: 0.8,
+                float_height: 1.0,
                 ..Default::default()
             },
             jump: TnuaBuiltinJumpConfig {
