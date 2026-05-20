@@ -10,8 +10,9 @@ pub struct TargetText;
 #[derive(Component)]
 pub struct Crosshair;
 
-pub fn setup_ui(mut commands: Commands) {
+pub fn setup_hud(mut commands: Commands) {
     commands.spawn((
+        InventoryText,
         Text::new("Inventory"),
         TextFont {
             font_size: 16.0,
@@ -22,10 +23,10 @@ pub fn setup_ui(mut commands: Commands) {
             top: px(60),
             ..default()
         },
-        InventoryText,
     ));
 
     commands.spawn((
+        Crosshair,
         Text::new("+"),
         TextFont {
             font_size: 16.0,
@@ -35,10 +36,10 @@ pub fn setup_ui(mut commands: Commands) {
             margin: UiRect::all(auto()),
             ..default()
         },
-        Crosshair,
     ));
 
     commands.spawn((
+        TargetText,
         Text::new(""),
         TextFont {
             font_size: 16.0,
@@ -53,11 +54,10 @@ pub fn setup_ui(mut commands: Commands) {
             },
             ..default()
         },
-        TargetText,
     ));
 }
 
-pub fn update_ui(
+pub fn draw_inventory(
     inventory: Single<&Inventory, With<Player>>,
     mut inventory_text: Single<&mut Text, With<InventoryText>>,
 ) {

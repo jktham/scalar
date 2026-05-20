@@ -10,10 +10,10 @@ use bevy_obj::ObjPlugin;
 use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 
+mod hud;
 mod inventory;
 mod pause_menu;
 mod player;
-mod ui;
 mod world;
 
 #[derive(States, Clone, PartialEq, Eq, Hash, Debug, Default)]
@@ -112,7 +112,7 @@ fn main() {
                 cursor_grab,
                 player::setup_player,
                 world::setup_world,
-                ui::setup_ui,
+                hud::setup_hud,
             ),
         )
         .add_systems(
@@ -122,7 +122,7 @@ fn main() {
                     player::update_movement.in_set(TnuaUserControlsSystems),
                     player::update_hover,
                     player::update_interact,
-                    ui::update_ui,
+                    hud::draw_inventory,
                 )
                     .run_if(in_state(GameState::Play)),
                 (pause_menu::pause_menu_interact).run_if(in_state(GameState::Paused)),

@@ -7,9 +7,9 @@ pub struct PauseMenu;
 
 pub fn pause_menu_interact(
     interaction_query: Query<(&Interaction, &mut BackgroundColor), Changed<Interaction>>,
-    continue_button: Single<&Interaction, With<ContinueButtonTag>>,
-    settings_button: Single<&Interaction, With<SettingsButtonTag>>,
-    quit_button: Single<&Interaction, With<QuitButtonTag>>,
+    continue_button: Single<&Interaction, With<ContinueButton>>,
+    settings_button: Single<&Interaction, With<SettingsButton>>,
+    quit_button: Single<&Interaction, With<QuitButton>>,
     mut next_state: ResMut<NextState<GameState>>,
     mut writer: MessageWriter<AppExit>,
 ) {
@@ -45,13 +45,13 @@ pub fn pause_menu_interact(
 }
 
 #[derive(Component)]
-pub struct ContinueButtonTag;
+pub struct ContinueButton;
 
 #[derive(Component)]
-pub struct SettingsButtonTag;
+pub struct SettingsButton;
 
 #[derive(Component)]
-pub struct QuitButtonTag;
+pub struct QuitButton;
 
 pub fn show_pause_menu(mut commands: Commands) {
     commands.spawn((
@@ -86,7 +86,7 @@ pub fn show_pause_menu(mut commands: Commands) {
                 )]
             ),
             (
-                ContinueButtonTag,
+                ContinueButton,
                 Button,
                 Node {
                     width: px(180),
@@ -106,7 +106,7 @@ pub fn show_pause_menu(mut commands: Commands) {
                 )]
             ),
             (
-                SettingsButtonTag,
+                SettingsButton,
                 Button,
                 Node {
                     width: px(180),
@@ -126,7 +126,7 @@ pub fn show_pause_menu(mut commands: Commands) {
                 )]
             ),
             (
-                QuitButtonTag,
+                QuitButton,
                 Button,
                 Node {
                     width: px(180),

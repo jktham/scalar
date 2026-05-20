@@ -1,6 +1,6 @@
 use crate::{
+    hud::TargetText,
     inventory::{Inventory, ItemStack},
-    ui::TargetText,
     world::{Node, Stump, Tree, get_terrain_height},
 };
 use avian3d::{
@@ -16,11 +16,7 @@ use bevy::{
         query::With,
         system::{Res, Single},
     },
-    input::{
-        ButtonInput,
-        keyboard::KeyCode,
-        mouse::{AccumulatedMouseMotion, MouseButton},
-    },
+    input::{ButtonInput, keyboard::KeyCode, mouse::AccumulatedMouseMotion},
     math::{Quat, Vec3},
     transform::components::Transform,
 };
@@ -159,7 +155,7 @@ pub fn update_interact(
     player: Single<Entity, With<Player>>,
     mut nodes: Query<&mut ItemStack, (With<Node>, Without<Tree>)>,
     mut trees: Query<(&Transform, &mut ItemStack), (With<Tree>, Without<Node>)>,
-    mouse_input: Res<ButtonInput<MouseButton>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -169,12 +165,12 @@ pub fn update_interact(
     // mine resource if left mouse button is pressed
     if let Some(entity) = target {
         if let Ok(mut stack) = nodes.get_mut(entity) {
-            if mouse_input.just_pressed(MouseButton::Left) && stack.count > 0 {
+            if keyboard_input.just_pressed(KeyCode::KeyE) && stack.count > 0 {
                 stack.count -= 1;
                 inventory.add(&stack.item, 1);
             }
         } else if let Ok((transform, mut stack)) = trees.get_mut(entity) {
-            if mouse_input.just_pressed(MouseButton::Left) && stack.count > 0 {
+            if keyboard_input.just_pressed(KeyCode::KeyE) && stack.count > 0 {
                 stack.count -= 1;
                 inventory.add(&stack.item, 1);
 
