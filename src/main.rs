@@ -10,6 +10,7 @@ use bevy_obj::ObjPlugin;
 use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 
+mod build_menu;
 mod hud;
 mod inventory;
 mod pause_menu;
@@ -20,7 +21,8 @@ mod world;
 pub enum GameState {
     #[default]
     Play,
-    Paused,
+    PauseMenu,
+    BuildMenu,
 }
 
 fn setup(mut commands: Commands) {
@@ -55,18 +57,35 @@ fn cursor_ungrab(mut cursor_options: Single<&mut CursorOptions>) {
     cursor_options.visible = true;
 }
 
-fn toggle_paused(
+fn handle_menu_keys(
     state: ResMut<State<GameState>>,
     mut next_state: ResMut<NextState<GameState>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Escape) {
         let next = match state.get() {
-            GameState::Play => GameState::Paused,
-            GameState::Paused => GameState::Play,
+            GameState::Play => GameState::PauseMenu,
+            GameState::PauseMenu | GameState::BuildMenu => GameState::Play,
         };
         next_state.set(next);
     }
+
+    if keyboard_input.just_pressed(KeyCode::KeyQ) {
+        let next = match state.get() {
+            GameState::Play => GameState::BuildMenu,
+            GameState::BuildMenu => GameState::Play,
+            _ => return,
+        };
+        next_state.set(next);
+    }
+}
+
+fn pause_time(mut time: ResMut<Time<Virtual>>) {
+    time.pause();
+}
+
+fn unpause_time(mut time: ResMut<Time<Virtual>>) {
+    time.unpause();
 }
 
 fn main() {
@@ -125,17 +144,26 @@ fn main() {
                     hud::draw_inventory,
                 )
                     .run_if(in_state(GameState::Play)),
-                (pause_menu::pause_menu_interact).run_if(in_state(GameState::Paused)),
-                toggle_paused,
+                (pause_menu::pause_menu_interact).run_if(in_state(GameState::PauseMenu)),
+                (build_menu::build_menu_interact).run_if(in_state(GameState::BuildMenu)),
+                handle_menu_keys,
             ),
         )
         .add_systems(
-            OnEnter(GameState::Paused),
-            (cursor_ungrab, pause_menu::show_pause_menu),
+            OnEnter(GameState::PauseMenu),
+            (pause_time, cursor_ungrab, pause_menu::show_pause_menu),
         )
         .add_systems(
-            OnExit(GameState::Paused),
-            (cursor_grab, pause_menu::hide_pause_menu),
+            OnExit(GameState::PauseMenu),
+            (unpause_time, cursor_grab, pause_menu::hide_pause_menu),
+        )
+        .add_systems(
+            OnEnter(GameState::BuildMenu),
+            (pause_time, cursor_ungrab, build_menu::show_build_menu),
+        )
+        .add_systems(
+            OnExit(GameState::BuildMenu),
+            (unpause_time, cursor_grab, build_menu::hide_build_menu),
         )
         .run();
 }
