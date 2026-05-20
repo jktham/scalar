@@ -11,9 +11,17 @@ use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 
 mod inventory;
+mod pause_menu;
 mod player;
 mod ui;
 mod world;
+
+#[derive(States, Clone, PartialEq, Eq, Hash, Debug, Default)]
+pub enum GameState {
+    #[default]
+    Play,
+    Paused,
+}
 
 fn setup(mut commands: Commands) {
     commands.spawn((
@@ -38,13 +46,27 @@ fn setup(mut commands: Commands) {
 }
 
 fn cursor_grab(mut cursor_options: Single<&mut CursorOptions>) {
-    cursor_options.grab_mode = CursorGrabMode::Confined;
+    cursor_options.grab_mode = CursorGrabMode::Locked;
     cursor_options.visible = false;
 }
 
 fn cursor_ungrab(mut cursor_options: Single<&mut CursorOptions>) {
     cursor_options.grab_mode = CursorGrabMode::None;
     cursor_options.visible = true;
+}
+
+fn toggle_paused(
+    state: ResMut<State<GameState>>,
+    mut next_state: ResMut<NextState<GameState>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+) {
+    if keyboard_input.just_pressed(KeyCode::Escape) {
+        let next = match state.get() {
+            GameState::Play => GameState::Paused,
+            GameState::Paused => GameState::Play,
+        };
+        next_state.set(next);
+    }
 }
 
 fn main() {
@@ -73,7 +95,7 @@ fn main() {
                     frame_time_graph_config: FrameTimeGraphConfig {
                         enabled: true,
                         min_fps: 30.0,
-                        target_fps: 60.0,
+                        target_fps: 120.0,
                     },
                 },
             },
@@ -82,6 +104,7 @@ fn main() {
             TnuaControllerPlugin::<player::ControlScheme>::new(FixedUpdate),
             TnuaAvian3dPlugin::new(FixedUpdate),
         ))
+        .init_state::<GameState>()
         .add_systems(
             Startup,
             (
@@ -95,11 +118,24 @@ fn main() {
         .add_systems(
             Update,
             (
-                player::update_movement.in_set(TnuaUserControlsSystems),
-                player::update_hover,
-                player::update_interact,
-                ui::update_ui,
+                (
+                    player::update_movement.in_set(TnuaUserControlsSystems),
+                    player::update_hover,
+                    player::update_interact,
+                    ui::update_ui,
+                )
+                    .run_if(in_state(GameState::Play)),
+                (pause_menu::pause_menu_interact).run_if(in_state(GameState::Paused)),
+                toggle_paused,
             ),
+        )
+        .add_systems(
+            OnEnter(GameState::Paused),
+            (cursor_ungrab, pause_menu::show_pause_menu),
+        )
+        .add_systems(
+            OnExit(GameState::Paused),
+            (cursor_grab, pause_menu::hide_pause_menu),
         )
         .run();
 }
