@@ -1,6 +1,7 @@
 use bevy::prelude::*;
+use strum::IntoEnumIterator;
 
-use crate::GameState;
+use crate::{GameState, buildings::Building, player::HeldBuilding};
 
 #[derive(Component)]
 pub struct BuildMenu;
@@ -9,6 +10,7 @@ pub fn build_menu_interact(
     interaction_query: Query<(&Interaction, &mut BackgroundColor), Changed<Interaction>>,
     build_buttons: Query<(&Interaction, &BuildButton)>,
     mut next_state: ResMut<NextState<GameState>>,
+    mut held_building: ResMut<HeldBuilding>,
 ) {
     for (interaction, mut background_color) in interaction_query {
         match *interaction {
@@ -27,7 +29,7 @@ pub fn build_menu_interact(
     for (interaction, build_button) in build_buttons {
         match *interaction {
             Interaction::Pressed => {
-                println!("Building {}", build_button.building);
+                held_building.0 = Some(build_button.0);
                 next_state.set(GameState::Play);
             }
             _ => (),
@@ -36,18 +38,13 @@ pub fn build_menu_interact(
 }
 
 #[derive(Component, Clone)]
-pub struct BuildButton {
-    building: i32,
-}
+pub struct BuildButton(pub Building);
 
 pub fn show_build_menu(mut commands: Commands) {
-    let buildings = vec![0, 1, 2, 3, 4, 5, 6, 7];
-
-    let building_buttons = buildings
-        .into_iter()
+    let building_buttons = Building::iter()
         .map(|building| {
             (
-                BuildButton { building },
+                BuildButton(building),
                 Button,
                 Node {
                     width: px(180),
@@ -58,7 +55,7 @@ pub fn show_build_menu(mut commands: Commands) {
                 },
                 BackgroundColor(Color::BLACK),
                 children![(
-                    Text::new(format!("Building {}", building)),
+                    Text::new(format!("{:?}", building)),
                     TextFont {
                         font_size: 16.0,
                         ..default()

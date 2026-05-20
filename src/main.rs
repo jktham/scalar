@@ -10,7 +10,10 @@ use bevy_obj::ObjPlugin;
 use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 
+use crate::player::HeldBuilding;
+
 mod build_menu;
+mod buildings;
 mod hud;
 mod inventory;
 mod pause_menu;
@@ -61,6 +64,7 @@ fn handle_menu_keys(
     state: ResMut<State<GameState>>,
     mut next_state: ResMut<NextState<GameState>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
+    held_building: ResMut<HeldBuilding>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Escape) {
         let next = match state.get() {
@@ -70,7 +74,7 @@ fn handle_menu_keys(
         next_state.set(next);
     }
 
-    if keyboard_input.just_pressed(KeyCode::KeyQ) {
+    if keyboard_input.just_pressed(KeyCode::KeyQ) && held_building.0.is_none() {
         let next = match state.get() {
             GameState::Play => GameState::BuildMenu,
             GameState::BuildMenu => GameState::Play,
@@ -124,6 +128,7 @@ fn main() {
             TnuaAvian3dPlugin::new(FixedUpdate),
         ))
         .init_state::<GameState>()
+        .insert_resource(player::HeldBuilding(None))
         .add_systems(
             Startup,
             (
@@ -141,6 +146,7 @@ fn main() {
                     player::update_movement.in_set(TnuaUserControlsSystems),
                     player::update_hover,
                     player::update_interact,
+                    player::place_held_building,
                     hud::draw_inventory,
                 )
                     .run_if(in_state(GameState::Play)),
