@@ -1,6 +1,6 @@
 use crate::{
     buildings::Building,
-    hud::TargetText,
+    hud::{ActionText, TargetText},
     inventory::{Inventory, ItemStack},
     world::{Node, Stump, Tree, get_terrain_height},
 };
@@ -137,21 +137,39 @@ pub fn update_hover(
     player: Single<Entity, With<Player>>,
     nodes: Query<&ItemStack, (With<Node>, Without<Tree>)>,
     trees: Query<&ItemStack, (With<Tree>, Without<Node>)>,
+    buildings: Query<(&Building, &ItemStack), (With<Building>, Without<Node>, Without<Tree>)>,
     mut target_text: Single<&mut Text, With<TargetText>>,
+    mut action_text: Single<&mut Text, (With<ActionText>, Without<TargetText>)>,
     held_building: Res<HeldBuilding>,
 ) {
-    if held_building.0.is_some() {
-        return; // if player is holding a building, don't show hover text
+    target_text.0 = String::from("");
+    if held_building.0.is_none() {
+        action_text.0 = String::from(""); // only update action text if player is not holding a building, otherwise it should show building placement instructions
     }
 
     let target = get_closest_hit(&camera_rayhits, vec![player.entity()]);
-
-    target_text.0 = String::from("");
     if let Some(entity) = target {
         if let Ok(stack) = nodes.get(entity) {
-            target_text.0 = String::from(format!("{:?} node ({})", &stack.item, &stack.count));
+            target_text.0 = String::from(format!(
+                "Resource node ({:?}, {})",
+                &stack.item, &stack.count
+            ));
+            if held_building.0.is_none() {
+                action_text.0 = String::from("[E] Mine");
+            }
         } else if let Ok(stack) = trees.get(entity) {
-            target_text.0 = String::from(format!("Tree ({})", &stack.count));
+            target_text.0 = String::from(format!("Tree ({:?}, {})", &stack.item, &stack.count));
+            if held_building.0.is_none() {
+                action_text.0 = String::from("[E] Mine");
+            }
+        } else if let Ok((building, stack)) = buildings.get(entity) {
+            target_text.0 = String::from(format!(
+                "{:?} ({:?}, {})",
+                &building, &stack.item, &stack.count
+            ));
+            if held_building.0.is_none() {
+                action_text.0 = String::from("[E] Open");
+            }
         }
     }
 }
@@ -207,34 +225,48 @@ pub struct HeldBuilding(pub Option<Building>);
 pub fn place_held_building(
     mut held_building: ResMut<HeldBuilding>,
     camera_rayhits: Single<&RayHits, With<Camera>>,
-    mut nodes: Query<&Transform, (With<Node>, Without<Tree>)>,
+    mut nodes: Query<(&Transform, &ItemStack), (With<Node>, Without<Tree>)>,
     player: Single<Entity, With<Player>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut target_text: Single<&mut Text, With<TargetText>>,
+    mut action_text: Single<&mut Text, With<ActionText>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::KeyQ) {
         held_building.0 = None; // cancel building placement if Q is pressed
+        return;
     }
 
     if let Some(building) = held_building.0 {
-        target_text.0 = String::from(format!("Cannot place {:?}", building));
+        action_text.0 = String::from(format!("[E] Can't place {:?} here\n[Q] Cancel", building));
 
         let target: Option<Entity> = get_closest_hit(&camera_rayhits, vec![player.entity()]);
-        if let Some(entity) = target {
-            if let Some(transform) = nodes.get_mut(entity).ok() {
-                target_text.0 = String::from(format!("Place {:?}", building));
-                if keyboard_input.just_pressed(KeyCode::KeyE) {
-                    commands.spawn((
-                        SceneRoot(asset_server.load::<Scene>(
-                            format!("{:?}.glb", building).to_lowercase() + "#Scene0",
-                        )),
-                        Transform::from_translation(transform.translation),
-                    ));
-                    held_building.0 = None;
+
+        match building {
+            Building::Miner { .. } => {
+                if let Some(entity) = target {
+                    if let Some((transform, stack)) = nodes.get_mut(entity).ok() {
+                        action_text.0 =
+                            String::from(format!("[E] Place {:?}\n[Q] Cancel", building));
+                        if keyboard_input.just_pressed(KeyCode::KeyE) {
+                            commands.spawn((
+                                Building::Miner,
+                                ItemStack {
+                                    item: stack.item,
+                                    count: stack.count,
+                                },
+                                SceneRoot(asset_server.load::<Scene>(
+                                    format!("{:?}.glb", building).to_lowercase() + "#Scene0",
+                                )),
+                                Transform::from_translation(transform.translation),
+                                Collider::cuboid(1.2, 3.0, 1.2),
+                            ));
+                            held_building.0 = None;
+                        }
+                    }
                 }
             }
+            _ => {}
         }
     }
 }

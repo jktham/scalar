@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum Item {
     Iron,
     Copper,
@@ -43,10 +43,7 @@ impl Inventory {
         if let Some(stack) = stack {
             stack.count = count;
         } else {
-            self.stacks.push(ItemStack {
-                item: item.clone(),
-                count,
-            });
+            self.stacks.push(ItemStack { item: *item, count });
         }
     }
 

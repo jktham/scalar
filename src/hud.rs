@@ -8,6 +8,9 @@ pub struct InventoryText;
 pub struct TargetText;
 
 #[derive(Component)]
+pub struct ActionText;
+
+#[derive(Component)]
 pub struct Crosshair;
 
 pub fn setup_hud(mut commands: Commands) {
@@ -49,8 +52,26 @@ pub fn setup_hud(mut commands: Commands) {
             margin: UiRect {
                 left: auto(),
                 right: auto(),
-                top: auto(),
-                bottom: Val::Percent(20.0),
+                top: percent(35),
+                bottom: auto(),
+            },
+            ..default()
+        },
+    ));
+
+    commands.spawn((
+        ActionText,
+        Text::new(""),
+        TextFont {
+            font_size: 16.0,
+            ..default()
+        },
+        Node {
+            margin: UiRect {
+                left: auto(),
+                right: auto(),
+                top: percent(40),
+                bottom: auto(),
             },
             ..default()
         },
