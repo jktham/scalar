@@ -25,6 +25,9 @@ pub struct Tree;
 #[derive(Component)]
 pub struct Stump;
 
+#[derive(Component)]
+pub struct Rock;
+
 const N_CHUNKS: i32 = 9;
 const N_TILES_X: i32 = 20; // should be even
 const N_TILES_Z: i32 = 36;
@@ -90,8 +93,8 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32) -> Mesh {
 
             let mut rng = rand::rng();
             let color = Vec4::new(
-                rng.random::<f32>() * 0.1 + (1.0 - steepness) * 0.2,
-                rng.random::<f32>() * 0.2 + steepness * 0.2 + 0.1,
+                rng.random::<f32>() * 0.1 + (1.0 - steepness) * 0.1,
+                rng.random::<f32>() * 0.1 + steepness * 0.1 + 0.1,
                 rng.random::<f32>() * 0.05 + (1.0 - steepness) * 0.05,
                 1.0,
             );
@@ -150,7 +153,7 @@ pub fn setup_world(
 
     // resource nodes
     let mut rng = rand::rng();
-    for _ in 0..100 {
+    for _ in 0..20 {
         let mut pos = vec3(
             rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
@@ -162,16 +165,16 @@ pub fn setup_world(
         let stack = if rng.random::<f32>() < 0.5 {
             ItemStack {
                 item: Item::Iron,
-                count: rng.random_range(0..100),
+                count: rng.random_range(1000..10000),
             }
         } else {
             ItemStack {
                 item: Item::Copper,
-                count: rng.random_range(0..100),
+                count: rng.random_range(1000..10000),
             }
         };
 
-        let transform = Transform::from_translation(pos).with_rotation(rot);
+        let transform = Transform::from_translation(pos).with_rotation(rot); // TODO: align with terrain normal
         let node = if stack.item == Item::Iron {
             asset_server.load::<Scene>("node_iron.glb#Scene0")
         } else {
@@ -188,18 +191,18 @@ pub fn setup_world(
     }
 
     // trees
-    for _ in 0..100 {
+    for _ in 0..800 {
         let mut pos = vec3(
             rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
             rng.random::<f32>() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
         );
-        pos.y = get_terrain_height(pos.x, pos.z) - 0.1;
+        pos.y = get_terrain_height(pos.x, pos.z);
         let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
 
         let stack = ItemStack {
             item: Item::Wood,
-            count: 10,
+            count: 5,
         };
 
         let transform = Transform::from_translation(pos).with_rotation(rot);
@@ -228,7 +231,7 @@ pub fn update_trees(
                 Stump,
                 SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
                 *transform,
-                Collider::cylinder(0.3, 2.0),
+                Collider::cylinder(0.5, 4.0),
             ));
         }
     }

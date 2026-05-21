@@ -309,8 +309,8 @@ pub fn place_held_building(
                                 SceneRoot(asset_server.load::<Scene>(
                                     format!("{:?}.glb", building).to_lowercase() + "#Scene0",
                                 )),
-                                Transform::from_translation(transform.translation),
-                                Collider::cuboid(0.5, 3.0, 0.5),
+                                transform.clone(),
+                                Collider::cylinder(0.3, 6.0),
                             ));
                             held_building.0 = None;
                         }
