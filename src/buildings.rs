@@ -36,7 +36,7 @@ pub fn update_buildings(
                     if node_stack.count > 0 {
                         props.progress += time.delta_secs() * props.speed;
                         if props.progress >= 1.0 {
-                            let amount = props.progress.floor() as i32;
+                            let amount = i32::min(node_stack.count, props.progress.floor() as i32);
                             building_stack.count += amount;
                             node_stack.count -= amount;
                             props.progress = props.progress.fract();

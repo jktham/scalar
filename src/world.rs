@@ -262,3 +262,22 @@ pub fn setup_world(
         ));
     }
 }
+
+pub fn update_trees(
+    trees: Query<(Entity, &Transform, &ItemStack), With<Tree>>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    for (entity, transform, stack) in trees {
+        // if tree is depleted, despawn it and spawn a stump
+        if stack.count <= 0 {
+            commands.entity(entity).despawn();
+            commands.spawn((
+                Stump,
+                SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
+                *transform,
+                Collider::cylinder(0.3, 2.0),
+            ));
+        }
+    }
+}

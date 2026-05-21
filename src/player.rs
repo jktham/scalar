@@ -2,7 +2,7 @@ use crate::{
     buildings::{Building, BuildingProperties},
     hud::{ActionText, TargetText},
     inventory::{Inventory, ItemStack},
-    world::{ResourceNode, Stump, Tree, get_terrain_height},
+    world::{ResourceNode, Tree, get_terrain_height},
 };
 use avian3d::{
     collision::collider::Collider,
@@ -27,8 +27,14 @@ use bevy_tnua::{
 };
 use bevy_tnua_avian3d::TnuaAvian3dSensorShape;
 
-#[derive(Component, Default)]
+#[derive(Component)]
 pub struct Player;
+
+#[derive(Component)]
+pub struct PlayerProperties {
+    pub mining_speed: f32,
+    pub mining_progress: f32,
+}
 
 #[derive(TnuaScheme)]
 #[scheme(basis = TnuaBuiltinWalk)]
@@ -44,7 +50,11 @@ pub fn setup_player(
     spawn_pos.y = get_terrain_height(spawn_pos.x, spawn_pos.z) + 2.0;
 
     commands.spawn((
-        Player::default(),
+        Player,
+        PlayerProperties {
+            mining_speed: 0.25,
+            mining_progress: 0.0,
+        },
         Inventory::default(),
         Transform::from_translation(spawn_pos),
         RigidBody::Dynamic,
@@ -135,6 +145,7 @@ fn get_closest_hit(rayhits: &RayHits, ignored: Vec<Entity>) -> Option<Entity> {
 pub fn update_hover(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
+    player_props: Single<&PlayerProperties, With<Player>>,
     nodes: Query<&ItemStack, (With<ResourceNode>, Without<Tree>)>,
     trees: Query<&ItemStack, (With<Tree>, Without<ResourceNode>)>,
     buildings: Query<
@@ -158,12 +169,26 @@ pub fn update_hover(
                 &stack.item, &stack.count
             ));
             if held_building.0.is_none() {
-                action_text.0 = String::from("[E] Mine");
+                if player_props.mining_progress == 0.0 {
+                    action_text.0 = String::from(format!("[E] Mine"));
+                } else {
+                    action_text.0 = String::from(format!(
+                        "[E] Mine, {:0>2.0}%",
+                        player_props.mining_progress * 100.0
+                    ));
+                }
             }
         } else if let Ok(stack) = trees.get(entity) {
             target_text.0 = String::from(format!("Tree ({:?}, {})", &stack.item, &stack.count));
             if held_building.0.is_none() {
-                action_text.0 = String::from("[E] Mine");
+                if player_props.mining_progress == 0.0 {
+                    action_text.0 = String::from(format!("[E] Mine"));
+                } else {
+                    action_text.0 = String::from(format!(
+                        "[E] Mine, {:0>2.0}%",
+                        player_props.mining_progress * 100.0
+                    ));
+                }
             }
         } else if let Ok((building, props, stack)) = buildings.get(entity) {
             target_text.0 = String::from(format!(
@@ -183,7 +208,8 @@ pub fn update_hover(
 pub fn update_interact(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
-    mut nodes: Query<&mut ItemStack, (With<ResourceNode>, Without<Tree>)>,
+    mut player_props: Single<&mut PlayerProperties, With<Player>>,
+    mut nodes: Query<(&Transform, &mut ItemStack), (With<ResourceNode>, Without<Tree>)>,
     mut trees: Query<(&Transform, &mut ItemStack), (With<Tree>, Without<ResourceNode>)>,
     mut buildings: Query<
         (&Building, &mut ItemStack),
@@ -191,9 +217,8 @@ pub fn update_interact(
     >,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
     held_building: Res<HeldBuilding>,
+    time: Res<Time>,
 ) {
     if held_building.0.is_some() {
         return; // if player is holding a building, don't interact with world
@@ -201,38 +226,34 @@ pub fn update_interact(
 
     let target = get_closest_hit(&camera_rayhits, vec![player.entity()]);
 
-    // mine resource if left mouse button is pressed
-    if let Some(entity) = target {
-        if let Ok(mut stack) = nodes.get_mut(entity) {
-            if keyboard_input.just_pressed(KeyCode::KeyE) && stack.count > 0 {
-                stack.count -= 1;
-                inventory.add(&stack.item, 1);
-            }
-        } else if let Ok((transform, mut stack)) = trees.get_mut(entity) {
-            if keyboard_input.just_pressed(KeyCode::KeyE) && stack.count > 0 {
-                stack.count -= 1;
-                inventory.add(&stack.item, 1);
+    // mine resource
+    if let Some(entity) = target
+        && let Ok((_transform, mut stack)) = nodes.get_mut(entity).or(trees.get_mut(entity))
+        && keyboard_input.pressed(KeyCode::KeyE)
+        && stack.count > 0
+    {
+        player_props.mining_progress += time.delta_secs() * player_props.mining_speed;
+        if player_props.mining_progress >= 1.0 {
+            let amount = i32::min(stack.count, player_props.mining_progress.floor() as i32);
+            stack.count -= amount;
+            inventory.add(&stack.item, amount);
+            player_props.mining_progress = player_props.mining_progress.fract();
+        }
+    } else {
+        player_props.mining_progress = 0.0;
+    }
 
-                // if tree is depleted, despawn it and spawn a stump
-                if stack.count <= 0 {
-                    commands.entity(entity).despawn();
-                    commands.spawn((
-                        Stump,
-                        SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
-                        *transform,
-                        Collider::cylinder(0.3, 2.0),
-                    ));
+    // interact with building
+    if let Some(entity) = target
+        && let Ok((building, mut stack)) = buildings.get_mut(entity)
+    {
+        if keyboard_input.just_pressed(KeyCode::KeyE) && stack.count > 0 {
+            match building {
+                Building::Miner { .. } => {
+                    inventory.add(&stack.item, stack.count);
+                    stack.count = 0;
                 }
-            }
-        } else if let Ok((building, mut stack)) = buildings.get_mut(entity) {
-            if keyboard_input.just_pressed(KeyCode::KeyE) && stack.count > 0 {
-                match building {
-                    Building::Miner { .. } => {
-                        inventory.add(&stack.item, stack.count);
-                        stack.count = 0;
-                    }
-                    _ => {}
-                }
+                _ => {}
             }
         }
     }
