@@ -145,8 +145,7 @@ fn main() {
                 (
                     player::update_movement.in_set(TnuaUserControlsSystems),
                     player::update_hover,
-                    player::update_interact,
-                    player::place_held_building,
+                    (player::update_interact, player::place_held_building).chain(),
                     hud::draw_inventory,
                 )
                     .run_if(in_state(GameState::Play)),
@@ -155,6 +154,7 @@ fn main() {
                 handle_menu_keys,
             ),
         )
+        .add_systems(FixedUpdate, buildings::update_buildings)
         .add_systems(
             OnEnter(GameState::PauseMenu),
             (pause_time, cursor_ungrab, pause_menu::show_pause_menu),

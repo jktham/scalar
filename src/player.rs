@@ -1,8 +1,8 @@
 use crate::{
-    buildings::Building,
+    buildings::{Building, BuildingProperties},
     hud::{ActionText, TargetText},
     inventory::{Inventory, ItemStack},
-    world::{Node, Stump, Tree, get_terrain_height},
+    world::{ResourceNode, Stump, Tree, get_terrain_height},
 };
 use avian3d::{
     collision::collider::Collider,
@@ -135,9 +135,12 @@ fn get_closest_hit(rayhits: &RayHits, ignored: Vec<Entity>) -> Option<Entity> {
 pub fn update_hover(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
-    nodes: Query<&ItemStack, (With<Node>, Without<Tree>)>,
-    trees: Query<&ItemStack, (With<Tree>, Without<Node>)>,
-    buildings: Query<(&Building, &ItemStack), (With<Building>, Without<Node>, Without<Tree>)>,
+    nodes: Query<&ItemStack, (With<ResourceNode>, Without<Tree>)>,
+    trees: Query<&ItemStack, (With<Tree>, Without<ResourceNode>)>,
+    buildings: Query<
+        (&Building, &BuildingProperties, &ItemStack),
+        (With<Building>, Without<ResourceNode>, Without<Tree>),
+    >,
     mut target_text: Single<&mut Text, With<TargetText>>,
     mut action_text: Single<&mut Text, (With<ActionText>, Without<TargetText>)>,
     held_building: Res<HeldBuilding>,
@@ -162,13 +165,16 @@ pub fn update_hover(
             if held_building.0.is_none() {
                 action_text.0 = String::from("[E] Mine");
             }
-        } else if let Ok((building, stack)) = buildings.get(entity) {
+        } else if let Ok((building, props, stack)) = buildings.get(entity) {
             target_text.0 = String::from(format!(
-                "{:?} ({:?}, {})",
-                &building, &stack.item, &stack.count
+                "{:?} ({:?}, {}), {:0>2.0}%",
+                &building,
+                &stack.item,
+                &stack.count,
+                props.progress * 100.0
             ));
             if held_building.0.is_none() {
-                action_text.0 = String::from("[E] Open");
+                action_text.0 = String::from("[E] Collect");
             }
         }
     }
@@ -177,8 +183,12 @@ pub fn update_hover(
 pub fn update_interact(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
-    mut nodes: Query<&mut ItemStack, (With<Node>, Without<Tree>)>,
-    mut trees: Query<(&Transform, &mut ItemStack), (With<Tree>, Without<Node>)>,
+    mut nodes: Query<&mut ItemStack, (With<ResourceNode>, Without<Tree>)>,
+    mut trees: Query<(&Transform, &mut ItemStack), (With<Tree>, Without<ResourceNode>)>,
+    mut buildings: Query<
+        (&Building, &mut ItemStack),
+        (With<Building>, Without<ResourceNode>, Without<Tree>),
+    >,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
     mut commands: Commands,
@@ -214,6 +224,16 @@ pub fn update_interact(
                     ));
                 }
             }
+        } else if let Ok((building, mut stack)) = buildings.get_mut(entity) {
+            if keyboard_input.just_pressed(KeyCode::KeyE) && stack.count > 0 {
+                match building {
+                    Building::Miner { .. } => {
+                        inventory.add(&stack.item, stack.count);
+                        stack.count = 0;
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 }
@@ -222,10 +242,14 @@ pub fn update_interact(
 /// The building the player is currently holding and about to place, if any
 pub struct HeldBuilding(pub Option<Building>);
 
+#[derive(Component)]
+/// node the miner is attached to
+pub struct AttachedNode(pub Entity);
+
 pub fn place_held_building(
     mut held_building: ResMut<HeldBuilding>,
     camera_rayhits: Single<&RayHits, With<Camera>>,
-    mut nodes: Query<(&Transform, &ItemStack), (With<Node>, Without<Tree>)>,
+    mut nodes: Query<(&Transform, &ItemStack), (With<ResourceNode>, Without<Tree>)>,
     player: Single<Entity, With<Player>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -251,15 +275,20 @@ pub fn place_held_building(
                         if keyboard_input.just_pressed(KeyCode::KeyE) {
                             commands.spawn((
                                 Building::Miner,
+                                BuildingProperties {
+                                    speed: 1.0,
+                                    progress: 0.0,
+                                },
+                                AttachedNode(entity),
                                 ItemStack {
                                     item: stack.item,
-                                    count: stack.count,
+                                    count: 0,
                                 },
                                 SceneRoot(asset_server.load::<Scene>(
                                     format!("{:?}.glb", building).to_lowercase() + "#Scene0",
                                 )),
                                 Transform::from_translation(transform.translation),
-                                Collider::cuboid(1.2, 3.0, 1.2),
+                                Collider::cuboid(0.5, 3.0, 0.5),
                             ));
                             held_building.0 = None;
                         }

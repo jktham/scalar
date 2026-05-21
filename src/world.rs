@@ -16,7 +16,7 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 pub struct Terrain;
 
 #[derive(Component)]
-pub struct Node;
+pub struct ResourceNode;
 
 #[derive(Component)]
 pub struct Tree;
@@ -226,7 +226,7 @@ pub fn setup_world(
             asset_server.load::<Scene>("node_copper.glb#Scene0")
         };
         commands.spawn((
-            Node,
+            ResourceNode,
             stack,
             SceneRoot(node.clone()),
             transform,
