@@ -1,3 +1,4 @@
+use crate::world::Rock;
 use crate::worldgen::get_terrain_height;
 use crate::{
     buildings::{Building, BuildingProperties},
@@ -149,6 +150,7 @@ pub fn update_hover(
     player_props: Single<&PlayerProperties, With<Player>>,
     nodes: Query<&ItemStack, (With<ResourceNode>, Without<Tree>)>,
     trees: Query<&ItemStack, (With<Tree>, Without<ResourceNode>)>,
+    rocks: Query<&ItemStack, (With<Rock>, Without<Tree>, Without<ResourceNode>)>,
     buildings: Query<
         (&Building, &BuildingProperties, &ItemStack),
         (With<Building>, Without<ResourceNode>, Without<Tree>),
@@ -191,6 +193,18 @@ pub fn update_hover(
                     ));
                 }
             }
+        } else if let Ok(stack) = rocks.get(entity) {
+            target_text.0 = String::from(format!("Rock ({:?}, {})", &stack.item, &stack.count));
+            if held_building.0.is_none() {
+                if player_props.mining_progress == 0.0 {
+                    action_text.0 = String::from(format!("[E] Mine"));
+                } else {
+                    action_text.0 = String::from(format!(
+                        "[E] Mine, {:0>2.0}%",
+                        player_props.mining_progress * 100.0
+                    ));
+                }
+            }
         } else if let Ok((building, props, stack)) = buildings.get(entity) {
             target_text.0 = String::from(format!(
                 "{:?} ({:?}, {}), {:0>2.0}%",
@@ -210,11 +224,17 @@ pub fn update_interact(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
     mut player_props: Single<&mut PlayerProperties, With<Player>>,
-    mut nodes: Query<(&Transform, &mut ItemStack), (With<ResourceNode>, Without<Tree>)>,
-    mut trees: Query<(&Transform, &mut ItemStack), (With<Tree>, Without<ResourceNode>)>,
+    mut nodes: Query<&mut ItemStack, (With<ResourceNode>, Without<Tree>)>,
+    mut trees: Query<&mut ItemStack, (With<Tree>, Without<ResourceNode>)>,
+    mut rocks: Query<&mut ItemStack, (With<Rock>, Without<Tree>, Without<ResourceNode>)>,
     mut buildings: Query<
         (&Building, &mut ItemStack),
-        (With<Building>, Without<ResourceNode>, Without<Tree>),
+        (
+            With<Building>,
+            Without<ResourceNode>,
+            Without<Tree>,
+            Without<Rock>,
+        ),
     >,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
@@ -229,7 +249,10 @@ pub fn update_interact(
 
     // mine resource
     if let Some(entity) = target
-        && let Ok((_transform, mut stack)) = nodes.get_mut(entity).or(trees.get_mut(entity))
+        && let Ok(mut stack) = nodes
+            .get_mut(entity)
+            .or(trees.get_mut(entity))
+            .or(rocks.get_mut(entity))
         && keyboard_input.pressed(KeyCode::KeyE)
         && stack.count > 0
     {

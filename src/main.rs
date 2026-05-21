@@ -149,7 +149,7 @@ fn main() {
                     (
                         player::update_interact,
                         player::place_held_building,
-                        world::update_trees,
+                        world::update_world,
                     )
                         .chain(),
                     hud::draw_inventory,

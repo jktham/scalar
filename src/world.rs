@@ -213,18 +213,51 @@ pub fn setup_world(
             SceneRoot(node.clone()),
             transform,
             RigidBody::Static,
-            Collider::cylinder(0.3, 8.0),
+            Collider::cylinder(0.5, 12.0),
+        ));
+    }
+
+    // rocks
+    for _ in 0..200 {
+        let mut pos = vec3(
+            rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
+            0.0,
+            rng.random::<f32>() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
+        );
+        pos.y = get_terrain_height(pos.x, pos.z);
+        let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
+
+        let stack = ItemStack {
+            item: Item::Stone,
+            count: 1,
+        };
+
+        let transform = Transform::from_translation(pos).with_rotation(rot); // TODO: align with terrain normal
+        let variant = rng.random_range::<i32, _>(0..=2);
+        let rock = asset_server.load::<Scene>(format!("rock_{}.glb#Scene0", variant));
+        commands.spawn((
+            Rock,
+            stack,
+            SceneRoot(rock),
+            transform,
+            RigidBody::Static,
+            if variant == 0 {
+                Collider::sphere(0.8)
+            } else {
+                Collider::sphere(0.3)
+            },
         ));
     }
 }
 
-pub fn update_trees(
+pub fn update_world(
     trees: Query<(Entity, &Transform, &ItemStack), With<Tree>>,
+    rocks: Query<(Entity, &Transform, &ItemStack), (With<Rock>, Without<Tree>)>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
+    // if tree is depleted, despawn it and spawn a stump
     for (entity, transform, stack) in trees {
-        // if tree is depleted, despawn it and spawn a stump
         if stack.count <= 0 {
             commands.entity(entity).despawn();
             commands.spawn((
@@ -233,6 +266,13 @@ pub fn update_trees(
                 *transform,
                 Collider::cylinder(0.5, 4.0),
             ));
+        }
+    }
+
+    // if rock is depleted, despawn it
+    for (entity, _transform, stack) in rocks {
+        if stack.count <= 0 {
+            commands.entity(entity).despawn();
         }
     }
 }
