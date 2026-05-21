@@ -1,8 +1,9 @@
+use crate::worldgen::get_terrain_height;
 use crate::{
     buildings::{Building, BuildingProperties},
     hud::{ActionText, TargetText},
     inventory::{Inventory, ItemStack},
-    world::{ResourceNode, Tree, get_terrain_height},
+    world::{ResourceNode, Tree},
 };
 use avian3d::{
     collision::collider::Collider,

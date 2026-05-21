@@ -1,3 +1,4 @@
+use crate::worldgen::get_terrain_height;
 use std::f32::consts::PI;
 
 use crate::inventory::{Item, ItemStack};
@@ -10,7 +11,7 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::Rng;
 
 #[derive(Component)]
 pub struct Terrain;
@@ -24,57 +25,6 @@ pub struct Tree;
 #[derive(Component)]
 pub struct Stump;
 
-fn smoothstep(a: f32, b: f32, w: f32) -> f32 {
-    return (b - a) * (3.0 - w * 2.0) * w * w + a;
-}
-
-fn random_gradient(ix: i32, iy: i32) -> Vec2 {
-    let seed: u64 = (ix as u64).strict_shl(32) | iy as u64;
-    let mut prng = StdRng::seed_from_u64(seed);
-
-    let r = prng.random::<f32>() * PI * 2.0; // [0, 2*pi)
-    return Vec2::new(f32::cos(r), f32::sin(r)); // [-1, 1]
-}
-
-fn dot_grid_gradient(ix: i32, iy: i32, x: f32, y: f32) -> f32 {
-    let gradient = random_gradient(ix, iy);
-    let dx = x - ix as f32;
-    let dy = y - iy as f32;
-    return dx * gradient.x + dy * gradient.y;
-}
-
-/// perlin noise implementation stolen from https://en.wikipedia.org/w/index.php?title=Perlin_noise&oldid=1230993513 <3
-// TODO: negative coordinates
-pub fn perlin(x: f32, y: f32) -> f32 {
-    // grid points
-    let x0 = x as i32;
-    let x1 = x0 + 1;
-    let y0 = y as i32;
-    let y1 = y0 + 1;
-
-    // interpolation weights
-    let sx = x - x0 as f32;
-    let sy = y - y0 as f32;
-
-    // interpolate between grid point gradients
-    let n0 = dot_grid_gradient(x0, y0, x, y);
-    let n1 = dot_grid_gradient(x1, y0, x, y);
-    let ix0 = smoothstep(n0, n1, sx);
-
-    let n2 = dot_grid_gradient(x0, y1, x, y);
-    let n3 = dot_grid_gradient(x1, y1, x, y);
-    let ix1 = smoothstep(n2, n3, sx);
-
-    return smoothstep(ix0, ix1, sy) * 0.5 + 0.5; // [0, 1]
-}
-
-pub fn get_terrain_height(x: f32, z: f32) -> f32 {
-    let scale = 0.03;
-    let offset = 1000.0; // to avoid negative coordinates
-    let height = 20.0;
-    perlin(x * scale + offset, z * scale + offset) * height
-}
-
 const N_CHUNKS: i32 = 9;
 const N_TILES_X: i32 = 20; // should be even
 const N_TILES_Z: i32 = 36;
@@ -86,7 +36,7 @@ const CHUNK_SIZE_Z: f32 =
 const WORLD_SIZE_X: f32 = N_CHUNKS as f32 * CHUNK_SIZE_X;
 const WORLD_SIZE_Z: f32 = N_CHUNKS as f32 * CHUNK_SIZE_Z;
 
-pub fn generate_terrain_chunk(cx: f32, cz: f32) -> Mesh {
+pub fn generate_chunk_mesh(cx: f32, cz: f32) -> Mesh {
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
@@ -136,11 +86,13 @@ pub fn generate_terrain_chunk(cx: f32, cz: f32) -> Mesh {
             normals.push(normal);
             normals.push(normal);
 
+            let steepness = normal.dot(Vec3::Y).powf(10.0);
+
             let mut rng = rand::rng();
             let color = Vec4::new(
-                rng.random::<f32>() * 0.1,
-                rng.random::<f32>() * 0.5 + 0.2,
-                rng.random::<f32>() * 0.1,
+                rng.random::<f32>() * 0.1 + (1.0 - steepness) * 0.2,
+                rng.random::<f32>() * 0.2 + steepness * 0.2 + 0.1,
+                rng.random::<f32>() * 0.05 + (1.0 - steepness) * 0.05,
                 1.0,
             );
             colors.push(color);
@@ -158,11 +110,11 @@ pub fn generate_terrain_chunk(cx: f32, cz: f32) -> Mesh {
     mesh
 }
 
-pub fn generate_terrain() -> Vec<Mesh> {
+pub fn generate_terrain_meshes() -> Vec<Mesh> {
     let mut chunks = Vec::new();
     for icx in 0..N_CHUNKS {
         for icz in 0..N_CHUNKS {
-            chunks.push(generate_terrain_chunk(
+            chunks.push(generate_chunk_mesh(
                 icx as f32 * CHUNK_SIZE_X - WORLD_SIZE_X / 2.0,
                 icz as f32 * CHUNK_SIZE_Z - WORLD_SIZE_Z / 2.0,
             ));
@@ -178,7 +130,7 @@ pub fn setup_world(
     asset_server: Res<AssetServer>,
 ) {
     // terrain
-    let chunk_meshes = generate_terrain();
+    let chunk_meshes = generate_terrain_meshes();
     for mesh in chunk_meshes {
         let terrain_mesh = meshes.add(mesh.clone());
         let terrain_material = materials.add(StandardMaterial {

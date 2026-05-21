@@ -19,6 +19,7 @@ mod inventory;
 mod pause_menu;
 mod player;
 mod world;
+mod worldgen;
 
 #[derive(States, Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub enum GameState {
