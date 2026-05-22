@@ -6,6 +6,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions, PresentMode, WindowResolution},
 };
+use bevy_framepace::FramepacePlugin;
 use bevy_obj::ObjPlugin;
 use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
@@ -101,7 +102,7 @@ fn main() {
                     primary_window: Some(Window {
                         title: "scalar".into(),
                         resolution: WindowResolution::new(960, 540),
-                        present_mode: PresentMode::AutoVsync,
+                        present_mode: PresentMode::AutoNoVsync,
                         ..default()
                     }),
                     ..default()
@@ -114,11 +115,11 @@ fn main() {
                         ..default()
                     },
                     text_color: Color::WHITE,
-                    refresh_interval: core::time::Duration::from_millis(100),
+                    refresh_interval: core::time::Duration::from_millis(500),
                     enabled: true,
                     frame_time_graph_config: FrameTimeGraphConfig {
                         enabled: true,
-                        min_fps: 30.0,
+                        min_fps: 60.0,
                         target_fps: 120.0,
                     },
                 },
@@ -127,6 +128,7 @@ fn main() {
             PhysicsPlugins::default(),
             TnuaControllerPlugin::<player::ControlScheme>::new(FixedUpdate),
             TnuaAvian3dPlugin::new(FixedUpdate),
+            FramepacePlugin,
         ))
         .init_state::<GameState>()
         .insert_resource(player::HeldBuilding(None))

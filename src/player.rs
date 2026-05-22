@@ -6,6 +6,7 @@ use crate::{
     inventory::{Inventory, ItemStack},
     world::{ResourceNode, Tree},
 };
+use avian3d::dynamics::rigid_body::Friction;
 use avian3d::{
     collision::collider::Collider,
     dynamics::rigid_body::{LockedAxes, RigidBody},
@@ -60,11 +61,16 @@ pub fn setup_player(
         Inventory::default(),
         Transform::from_translation(spawn_pos),
         RigidBody::Dynamic,
-        Collider::capsule(0.5, 0.5),
+        Collider::capsule(0.3, 3.0),
+        Friction::new(0.1),
         TnuaController::<ControlScheme>::default(),
         TnuaConfig::<ControlScheme>(control_scheme_configs.add(ControlSchemeConfig {
             basis: TnuaBuiltinWalkConfig {
-                float_height: 1.0,
+                float_height: 2.0,
+                cling_distance: 0.0,
+                acceleration: 120.0,
+                air_acceleration: 60.0,
+                max_slope: f32::to_radians(80.0),
                 ..Default::default()
             },
             jump: TnuaBuiltinJumpConfig {
@@ -72,7 +78,7 @@ pub fn setup_player(
                 ..Default::default()
             },
         })),
-        TnuaAvian3dSensorShape(Collider::cylinder(0.49, 0.0)),
+        TnuaAvian3dSensorShape(Collider::cylinder(0.25, 0.0)),
         LockedAxes::ROTATION_LOCKED,
     ));
 }
@@ -127,7 +133,7 @@ pub fn update_movement(
         * Quat::from_axis_angle(left, mouse_motion.delta.y * SENSITIVITY)
         * camera_transform.rotation; // TODO: prevent flipping over pole
 
-    camera_transform.translation = player_transform.translation + Vec3::new(0.0, 1.2, 0.0);
+    camera_transform.translation = player_transform.translation + Vec3::new(0.0, 1.0, 0.0);
 }
 
 const RANGE: f32 = 6.0;
@@ -333,7 +339,11 @@ pub fn place_held_building(
                                     format!("{:?}.glb", building).to_lowercase() + "#Scene0",
                                 )),
                                 transform.clone(),
-                                Collider::cylinder(0.3, 6.0),
+                                Collider::compound(vec![(
+                                    Vec3::new(0.0, 2.6, 0.0),
+                                    Quat::default(),
+                                    Collider::cylinder(1.1, 2.6),
+                                )]),
                             ));
                             held_building.0 = None;
                         }
