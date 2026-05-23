@@ -1,4 +1,4 @@
-use crate::worldgen::get_terrain_height;
+use crate::worldgen::WorldGen;
 use std::f32::consts::PI;
 
 use crate::inventory::{Item, ItemStack};
@@ -28,7 +28,7 @@ pub struct Stump;
 #[derive(Component)]
 pub struct Rock;
 
-const N_CHUNKS: i32 = 9;
+const N_CHUNKS: i32 = 19;
 const N_TILES_X: i32 = 20; // should be even
 const N_TILES_Z: i32 = 36;
 const TILE_RADIUS: f32 = 1.0;
@@ -39,7 +39,7 @@ const CHUNK_SIZE_Z: f32 =
 const WORLD_SIZE_X: f32 = N_CHUNKS as f32 * CHUNK_SIZE_X;
 const WORLD_SIZE_Z: f32 = N_CHUNKS as f32 * CHUNK_SIZE_Z;
 
-pub fn generate_chunk_mesh(cx: f32, cz: f32) -> Mesh {
+pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>) -> Mesh {
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
@@ -76,9 +76,9 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32) -> Mesh {
                     * if odd { 1.0 } else { -1.0 }
                     * TILE_RADIUS;
 
-            v0.y = get_terrain_height(v0.x, v0.z);
-            v1.y = get_terrain_height(v1.x, v1.z);
-            v2.y = get_terrain_height(v2.x, v2.z);
+            v0.y = worldgen.get_height(v0.x, v0.z);
+            v1.y = worldgen.get_height(v1.x, v1.z);
+            v2.y = worldgen.get_height(v2.x, v2.z);
 
             vertices.push(v1);
             vertices.push(v0);
@@ -113,13 +113,14 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32) -> Mesh {
     mesh
 }
 
-pub fn generate_terrain_meshes() -> Vec<Mesh> {
+pub fn generate_terrain_meshes(worldgen: &Res<WorldGen>) -> Vec<Mesh> {
     let mut chunks = Vec::new();
     for icx in 0..N_CHUNKS {
         for icz in 0..N_CHUNKS {
             chunks.push(generate_chunk_mesh(
                 icx as f32 * CHUNK_SIZE_X - WORLD_SIZE_X / 2.0,
                 icz as f32 * CHUNK_SIZE_Z - WORLD_SIZE_Z / 2.0,
+                worldgen,
             ));
         }
     }
@@ -131,9 +132,10 @@ pub fn setup_world(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
+    worldgen: Res<WorldGen>,
 ) {
     // terrain
-    let chunk_meshes = generate_terrain_meshes();
+    let chunk_meshes = generate_terrain_meshes(&worldgen);
     for mesh in chunk_meshes {
         let terrain_mesh = meshes.add(mesh.clone());
         let terrain_material = materials.add(StandardMaterial {
@@ -153,14 +155,18 @@ pub fn setup_world(
 
     // resource nodes
     let mut rng = rand::rng();
-    for _ in 0..20 {
+    for _ in 0..100 {
         let mut pos = vec3(
             rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
             rng.random::<f32>() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
         );
-        pos.y = get_terrain_height(pos.x, pos.z);
+        pos.y = worldgen.get_height(pos.x, pos.z);
         let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
+
+        let normal = worldgen.get_normal(pos.x, pos.z);
+        let normal_rot =
+            Quat::from_axis_angle(normal.cross(Vec3::Y), f32::acos(normal.dot(Vec3::Y)));
 
         let stack = if rng.random::<f32>() < 0.5 {
             ItemStack {
@@ -174,7 +180,7 @@ pub fn setup_world(
             }
         };
 
-        let transform = Transform::from_translation(pos).with_rotation(rot); // TODO: align with terrain normal
+        let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
         let node = if stack.item == Item::Iron {
             asset_server.load::<Scene>("node_iron.glb#Scene0")
         } else {
@@ -191,13 +197,13 @@ pub fn setup_world(
     }
 
     // trees
-    for _ in 0..800 {
+    for _ in 0..2000 {
         let mut pos = vec3(
             rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
             rng.random::<f32>() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
         );
-        pos.y = get_terrain_height(pos.x, pos.z);
+        pos.y = worldgen.get_height(pos.x, pos.z);
         let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
 
         let stack = ItemStack {
@@ -218,21 +224,25 @@ pub fn setup_world(
     }
 
     // rocks
-    for _ in 0..200 {
+    for _ in 0..1000 {
         let mut pos = vec3(
             rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
             rng.random::<f32>() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
         );
-        pos.y = get_terrain_height(pos.x, pos.z);
+        pos.y = worldgen.get_height(pos.x, pos.z);
         let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
+
+        let normal = worldgen.get_normal(pos.x, pos.z);
+        let normal_rot =
+            Quat::from_axis_angle(normal.cross(Vec3::Y), f32::acos(normal.dot(Vec3::Y)));
 
         let stack = ItemStack {
             item: Item::Stone,
             count: 1,
         };
 
-        let transform = Transform::from_translation(pos).with_rotation(rot); // TODO: align with terrain normal
+        let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
         let variant = rng.random_range::<i32, _>(0..=2);
         let rock = asset_server.load::<Scene>(format!("rock_{}.glb#Scene0", variant));
         commands.spawn((

@@ -132,6 +132,7 @@ fn main() {
         ))
         .init_state::<GameState>()
         .insert_resource(player::HeldBuilding(None))
+        .insert_resource(worldgen::WorldGen::generate())
         .add_systems(
             Startup,
             (

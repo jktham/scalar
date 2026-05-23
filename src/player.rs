@@ -1,5 +1,5 @@
 use crate::world::Rock;
-use crate::worldgen::get_terrain_height;
+use crate::worldgen::WorldGen;
 use crate::{
     buildings::{Building, BuildingProperties},
     hud::{ActionText, TargetText},
@@ -48,9 +48,10 @@ pub enum ControlScheme {
 pub fn setup_player(
     mut commands: Commands,
     mut control_scheme_configs: ResMut<Assets<ControlSchemeConfig>>,
+    worldgen: Res<WorldGen>,
 ) {
     let mut spawn_pos = Vec3::new(0.0, 0.0, 0.0);
-    spawn_pos.y = get_terrain_height(spawn_pos.x, spawn_pos.z) + 2.0;
+    spawn_pos.y = worldgen.get_height(spawn_pos.x, spawn_pos.z) + 2.0;
 
     commands.spawn((
         Player,
@@ -120,7 +121,9 @@ pub fn update_movement(
     player_controller.initiate_action_feeding();
     player_controller.basis = TnuaBuiltinWalk {
         desired_motion: movement.normalize_or_zero() * speed,
-        desired_forward: Some(Dir3::from_xyz_unchecked(front.x, 0.0, front.z)),
+        desired_forward: Some(Dir3::new_unchecked(
+            Vec3::new(front.x, 0.0, front.z).normalize(),
+        )),
         ..Default::default()
     };
     if keyboard_input.pressed(KeyCode::Space) {
