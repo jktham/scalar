@@ -15,10 +15,14 @@ strum = "0.28"
 strum_macros = "0.28"
 bevy_framepace = "0.21.0"
 fastrand = "2.4.1"
+fastapprox = "0.3.1"
+image = "0.25.10"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
 opt-level = 1
+strip = false
+debug = true
 
 # Enable a large amount of optimization in the dev profile for dependencies.
 [profile.dev.package."*"]

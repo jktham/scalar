@@ -28,4 +28,6 @@ target
 
 # manually added
 **/*.blend1
-**/perf.*
+perf.*
+flamegraph.svg
+/output

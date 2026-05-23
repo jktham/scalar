@@ -1,6 +1,12 @@
+use std::{
+    f32::consts::PI,
+    ops::{Add, Mul},
+    path::Path,
 use std::{f32::consts::PI, ops::Add, ops::Mul};
+};
 
 use bevy::prelude::*;
+use image::ColorType;
 
 fn smoothstep(a: f32, b: f32, w: f32) -> f32 {
     return (b - a) * (3.0 - w * 2.0) * w * w + a;
@@ -178,5 +184,53 @@ impl WorldGen {
 
         // interpolate normal vector
         bilinear_interp::<Vec3>(ix, iz, &self.normal).normalize()
+    }
+
+    /// dump data as pngs in path
+    pub fn dump(&self, path: &Path) {
+        // height
+        let min_height = self.height.iter().copied().reduce(f32::min).unwrap_or(0.0);
+        let max_height = self.height.iter().copied().reduce(f32::max).unwrap_or(1.0);
+
+        fn normalize_float(f: f32, min: f32, max: f32) -> f32 {
+            if min == max {
+                return 0.0;
+            }
+            (f - min) / (max - min)
+        }
+
+        image::save_buffer(
+            path.join("height.png"),
+            self.height
+                .iter()
+                .map(|f| (normalize_float(*f, min_height, max_height) * 255.0) as u8)
+                .collect::<Vec<u8>>()
+                .as_slice(),
+            TERRAIN_N as u32,
+            TERRAIN_N as u32,
+            ColorType::L8,
+        )
+        .unwrap();
+
+        // normal
+        image::save_buffer(
+            path.join("normal.png"),
+            self.normal
+                .iter()
+                .map(|v| {
+                    [
+                        (v.x * 255.0) as u8,
+                        (v.y * 255.0) as u8,
+                        (v.z * 255.0) as u8,
+                    ]
+                })
+                .flatten()
+                .collect::<Vec<u8>>()
+                .as_slice(),
+            TERRAIN_N as u32,
+            TERRAIN_N as u32,
+            ColorType::Rgb8,
+        )
+        .unwrap();
     }
 }

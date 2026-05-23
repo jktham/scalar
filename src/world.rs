@@ -1,5 +1,5 @@
 use crate::worldgen::WorldGen;
-use std::f32::consts::PI;
+use std::{f32::consts::PI, path::Path};
 
 use crate::inventory::{Item, ItemStack};
 use avian3d::{
@@ -134,6 +134,8 @@ pub fn setup_world(
     asset_server: Res<AssetServer>,
     worldgen: Res<WorldGen>,
 ) {
+    worldgen.dump(Path::new("./output"));
+
     // terrain
     let chunk_meshes = generate_terrain_chunk_meshes(&worldgen);
     for mesh in chunk_meshes {
