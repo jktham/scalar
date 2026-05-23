@@ -58,6 +58,7 @@ pub fn perlin(x: f32, y: f32) -> f32 {
     return smoothstep(ix0, ix1, sy) * 0.5 + 0.5; // [0, 1]
 }
 
+/// returns height in \[0, 1\]
 pub fn perlin_octaves(x: f32, y: f32, octaves: u32, lacunarity: f32, persistence: f32) -> f32 {
     let mut value = 0.0;
     let mut amplitude = 1.0;
@@ -123,55 +124,53 @@ impl WorldGen {
         let t0 = Instant::now();
         println!("running worldgen, {TERRAIN_N}x{TERRAIN_N}");
 
-        let mut terrain = WorldGen::new();
+        let mut worldgen = WorldGen::new();
 
         // terrain height
-        let scale = 0.01;
+        let xz_scale = 0.01;
         let offset = 1000.0;
-        let height = 100.0;
+        let y_scale = 100.0;
 
-        terrain
+        let compute_height = |x: f32, z: f32| -> f32 {
+            perlin_octaves(
+                (x * xz_scale + offset) / TERRAIN_RESOLUTION,
+                (z * xz_scale + offset) / TERRAIN_RESOLUTION,
+                3,
+                2.0,
+                0.5,
+            ) * y_scale
+        };
+
+        worldgen
             .height
             .par_iter_mut()
             .enumerate()
             .for_each(|(i, v)| {
-                let x = i / TERRAIN_N;
-                let z = i % TERRAIN_N;
+                let x = (i / TERRAIN_N) as f32;
+                let z = (i % TERRAIN_N) as f32;
 
-                *v = perlin_octaves(
-                    (x as f32 * scale + offset) / TERRAIN_RESOLUTION,
-                    (z as f32 * scale + offset) / TERRAIN_RESOLUTION,
-                    3,
-                    2.0,
-                    0.5,
-                ) * height;
+                *v = compute_height(x, z);
             });
 
         // terrain normal
-        terrain
+        worldgen
             .normal
             .par_iter_mut()
             .enumerate()
             .for_each(|(i, v)| {
-                let x = i / TERRAIN_N;
-                let z = i % TERRAIN_N;
+                let x = (i / TERRAIN_N) as f32;
+                let z = (i % TERRAIN_N) as f32;
 
-                if x >= TERRAIN_N - 1 || z >= TERRAIN_N - 1 {
-                    *v = Vec3::Y;
-                    return;
-                }
-
-                let dx = (terrain.height[(x + 1) * TERRAIN_N + z]
-                    - terrain.height[(x - 0) * TERRAIN_N + z])
-                    / (1.0 / TERRAIN_RESOLUTION);
-                let dz = (terrain.height[x * TERRAIN_N + (z + 1)]
-                    - terrain.height[x * TERRAIN_N + (z - 0)])
-                    / (1.0 / TERRAIN_RESOLUTION);
+                let h = 0.5;
+                let dx = (compute_height(x + h, z) - compute_height(x - h, z))
+                    / (2.0 * h / TERRAIN_RESOLUTION);
+                let dz = (compute_height(x, z + h) - compute_height(x, z - h))
+                    / (2.0 * h / TERRAIN_RESOLUTION);
 
                 let tx = Vec3::new(1.0, dx, 0.0);
                 let tz = Vec3::new(0.0, dz, 1.0);
 
-                let n = -tx.cross(tz).normalize();
+                let n = tz.cross(tx).normalize();
 
                 *v = n;
             });
@@ -179,7 +178,9 @@ impl WorldGen {
         let t1 = Instant::now();
         println!("done, {:.2}s", (t1 - t0).as_secs_f32());
 
-        terrain
+        worldgen.dump(std::path::Path::new("./output"));
+
+        worldgen
     }
 
     /// interpolated terrain height at meters x, z
@@ -214,6 +215,9 @@ impl WorldGen {
 
     /// dump data as pngs in path
     pub fn dump(&self, path: &Path) {
+        let t0 = Instant::now();
+        println!("dumping worldgen data to {}", path.display());
+
         // height
         let min_height = self.height.iter().copied().reduce(f32::min).unwrap_or(0.0);
         let max_height = self.height.iter().copied().reduce(f32::max).unwrap_or(1.0);
@@ -258,5 +262,8 @@ impl WorldGen {
             ColorType::Rgb8,
         )
         .unwrap();
+
+        let t1 = Instant::now();
+        println!("done, {:.2}s", (t1 - t0).as_secs_f32());
     }
 }

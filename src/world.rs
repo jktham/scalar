@@ -134,9 +134,6 @@ pub fn setup_world(
     asset_server: Res<AssetServer>,
     worldgen: Res<WorldGen>,
 ) {
-    // dump worldgen data
-    // worldgen.dump(std::path::Path::new("./output"));
-
     // terrain
     let chunk_meshes = generate_terrain_chunk_meshes(&worldgen);
     for mesh in chunk_meshes {
