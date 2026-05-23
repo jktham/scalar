@@ -1,8 +1,6 @@
 use avian3d::prelude::*;
 use bevy::{
-    anti_alias::taa::TemporalAntiAliasing,
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
-    pbr::ScreenSpaceAmbientOcclusion,
     prelude::*,
     window::{CursorGrabMode, CursorOptions, PresentMode, WindowResolution},
 };
@@ -15,6 +13,7 @@ use crate::player::HeldBuilding;
 
 mod build_menu;
 mod buildings;
+mod environment;
 mod hud;
 mod inventory;
 mod pause_menu;
@@ -28,28 +27,6 @@ pub enum GameState {
     Play,
     PauseMenu,
     BuildMenu,
-}
-
-fn setup(mut commands: Commands) {
-    commands.spawn((
-        DirectionalLight {
-            shadows_enabled: true,
-            illuminance: 2000.0,
-            ..default()
-        },
-        Transform::from_xyz(4.0, 8.0, 2.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
-
-    commands.spawn((
-        Camera3d::default(),
-        // NoIndirectDrawing,
-        ScreenSpaceAmbientOcclusion::default(),
-        Msaa::Off,
-        TemporalAntiAliasing::default(),
-        Transform::from_xyz(0.0, 0.0, 0.0).looking_to(Vec3::new(1.0, 0.0, 0.0), Vec3::Y),
-        RayCaster::new(Vec3::ZERO, -Dir3::Z).with_max_distance(10.0),
-        RayHits::default(),
-    ));
 }
 
 fn cursor_grab(mut cursor_options: Single<&mut CursorOptions>) {
@@ -136,10 +113,10 @@ fn main() {
         .add_systems(
             Startup,
             (
-                setup,
                 cursor_grab,
                 player::setup_player,
                 world::setup_world,
+                environment::setup_environment,
                 hud::setup_hud,
             ),
         )

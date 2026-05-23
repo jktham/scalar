@@ -136,7 +136,7 @@ pub fn update_movement(
         * Quat::from_axis_angle(left, mouse_motion.delta.y * SENSITIVITY)
         * camera_transform.rotation; // TODO: prevent flipping over pole
 
-    camera_transform.translation = player_transform.translation + Vec3::new(0.0, 1.0, 0.0);
+    camera_transform.translation = player_transform.translation + Vec3::new(0.0, 0.0, 0.0);
 }
 
 const RANGE: f32 = 6.0;

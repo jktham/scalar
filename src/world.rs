@@ -113,7 +113,7 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>) -> Mesh {
     mesh
 }
 
-pub fn generate_terrain_meshes(worldgen: &Res<WorldGen>) -> Vec<Mesh> {
+pub fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>) -> Vec<Mesh> {
     let mut chunks = Vec::new();
     for icx in 0..N_CHUNKS {
         for icz in 0..N_CHUNKS {
@@ -135,7 +135,7 @@ pub fn setup_world(
     worldgen: Res<WorldGen>,
 ) {
     // terrain
-    let chunk_meshes = generate_terrain_meshes(&worldgen);
+    let chunk_meshes = generate_terrain_chunk_meshes(&worldgen);
     for mesh in chunk_meshes {
         let terrain_mesh = meshes.add(mesh.clone());
         let terrain_material = materials.add(StandardMaterial {
