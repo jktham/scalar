@@ -2,23 +2,28 @@ use std::{
     f32::consts::PI,
     ops::{Add, Mul},
     path::Path,
-use std::{f32::consts::PI, ops::Add, ops::Mul};
+    time::Instant,
 };
 
 use bevy::prelude::*;
+use fastapprox::fast;
+use fastrand::Rng;
 use image::ColorType;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 fn smoothstep(a: f32, b: f32, w: f32) -> f32 {
     return (b - a) * (3.0 - w * 2.0) * w * w + a;
 }
 
-/// deterministic random gradient for same inputs
+/// deterministic random gradient for each grid coordinate
 fn random_gradient(ix: i32, iy: i32) -> Vec2 {
     let seed: u64 = (ix as u64).strict_shl(32) | iy as u64;
-    let mut prng = fastrand::Rng::with_seed(seed);
+    let mut prng = Rng::with_seed(seed);
 
-    let r = prng.f32() * PI * 2.0; // [0, 2*pi)
-    return Vec2::new(f32::cos(r), f32::sin(r)); // [-1, 1]
+    let r = prng.f32() * PI * 2.0 - PI; // [-pi, pi)
+    let gradient = Vec2::new(fast::cos(r), fast::sin(r));
+
+    gradient
 }
 
 fn dot_grid_gradient(ix: i32, iy: i32, x: f32, y: f32) -> f32 {
@@ -115,6 +120,9 @@ impl WorldGen {
     }
 
     pub fn generate() -> Self {
+        let t0 = Instant::now();
+        println!("running worldgen, {TERRAIN_N}x{TERRAIN_N}");
+
         let mut terrain = WorldGen::new();
 
         // terrain height
@@ -122,21 +130,37 @@ impl WorldGen {
         let offset = 1000.0;
         let height = 100.0;
 
-        for x in 0..TERRAIN_N {
-            for z in 0..TERRAIN_N {
-                terrain.height[x * TERRAIN_N + z] = perlin_octaves(
+        terrain
+            .height
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, v)| {
+                let x = i / TERRAIN_N;
+                let z = i % TERRAIN_N;
+
+                *v = perlin_octaves(
                     (x as f32 * scale + offset) / TERRAIN_RESOLUTION,
                     (z as f32 * scale + offset) / TERRAIN_RESOLUTION,
                     3,
                     2.0,
                     0.5,
                 ) * height;
-            }
-        }
+            });
 
         // terrain normal
-        for x in 0..TERRAIN_N - 1 {
-            for z in 0..TERRAIN_N - 1 {
+        terrain
+            .normal
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(i, v)| {
+                let x = i / TERRAIN_N;
+                let z = i % TERRAIN_N;
+
+                if x >= TERRAIN_N - 1 || z >= TERRAIN_N - 1 {
+                    *v = Vec3::Y;
+                    return;
+                }
+
                 let dx = (terrain.height[(x + 1) * TERRAIN_N + z]
                     - terrain.height[(x - 0) * TERRAIN_N + z])
                     / (1.0 / TERRAIN_RESOLUTION);
@@ -147,11 +171,13 @@ impl WorldGen {
                 let tx = Vec3::new(1.0, dx, 0.0);
                 let tz = Vec3::new(0.0, dz, 1.0);
 
-                let normal = tx.cross(tz).normalize();
+                let n = -tx.cross(tz).normalize();
 
-                terrain.normal[x * TERRAIN_N + z] = normal;
-            }
-        }
+                *v = n;
+            });
+
+        let t1 = Instant::now();
+        println!("done, {:.2}s", (t1 - t0).as_secs_f32());
 
         terrain
     }

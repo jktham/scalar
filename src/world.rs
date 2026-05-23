@@ -1,5 +1,5 @@
 use crate::worldgen::WorldGen;
-use std::{f32::consts::PI, path::Path};
+use std::f32::consts::PI;
 
 use crate::inventory::{Item, ItemStack};
 use avian3d::{
@@ -134,7 +134,8 @@ pub fn setup_world(
     asset_server: Res<AssetServer>,
     worldgen: Res<WorldGen>,
 ) {
-    worldgen.dump(Path::new("./output"));
+    // dump worldgen data
+    // worldgen.dump(std::path::Path::new("./output"));
 
     // terrain
     let chunk_meshes = generate_terrain_chunk_meshes(&worldgen);
@@ -168,7 +169,7 @@ pub fn setup_world(
 
         let normal = worldgen.get_normal(pos.x, pos.z);
         let normal_rot =
-            Quat::from_axis_angle(normal.cross(Vec3::Y), f32::acos(normal.dot(Vec3::Y)));
+            Quat::from_axis_angle(normal.cross(Vec3::Y), -f32::acos(normal.dot(Vec3::Y)));
 
         let stack = if rng.random::<f32>() < 0.5 {
             ItemStack {
@@ -237,7 +238,7 @@ pub fn setup_world(
 
         let normal = worldgen.get_normal(pos.x, pos.z);
         let normal_rot =
-            Quat::from_axis_angle(normal.cross(Vec3::Y), f32::acos(normal.dot(Vec3::Y)));
+            Quat::from_axis_angle(normal.cross(Vec3::Y), -f32::acos(normal.dot(Vec3::Y)));
 
         let stack = ItemStack {
             item: Item::Stone,

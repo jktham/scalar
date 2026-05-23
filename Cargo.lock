@@ -5240,6 +5240,7 @@ dependencies = [
  "image",
  "log",
  "rand",
+ "rayon",
  "strum",
  "strum_macros",
 ]
