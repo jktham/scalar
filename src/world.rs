@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 
 use crate::inventory::{Item, ItemStack};
 use avian3d::{
-    collision::collider::{Collider, ColliderConstructor},
+    collision::collider::{ColliderConstructor, ColliderConstructorHierarchy},
     dynamics::rigid_body::RigidBody,
 };
 use bevy::{
@@ -187,7 +187,7 @@ pub fn setup_world(
             SceneRoot(node.clone()),
             transform,
             RigidBody::Static,
-            Collider::sphere(0.5),
+            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
         ));
     }
 
@@ -214,7 +214,7 @@ pub fn setup_world(
             SceneRoot(node.clone()),
             transform,
             RigidBody::Static,
-            Collider::cylinder(0.5, 12.0),
+            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
         ));
     }
 
@@ -246,11 +246,7 @@ pub fn setup_world(
             SceneRoot(rock),
             transform,
             RigidBody::Static,
-            if variant == 0 {
-                Collider::sphere(0.8)
-            } else {
-                Collider::sphere(0.3)
-            },
+            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
         ));
     }
 }
@@ -269,7 +265,7 @@ pub fn update_world(
                     commands.spawn((
                         SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
                         *transform,
-                        Collider::cylinder(0.5, 4.0),
+                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
                     ));
                 }
                 _ => {}

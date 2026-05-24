@@ -6,6 +6,8 @@ use crate::{
     hud::{ActionText, TargetText},
     inventory::{Inventory, ItemStack},
 };
+use avian3d::collision::collider::ColliderConstructor;
+use avian3d::collision::collider::ColliderConstructorHierarchy;
 use avian3d::dynamics::rigid_body::Friction;
 use avian3d::spatial_query::RayHitData;
 use avian3d::{
@@ -63,15 +65,16 @@ pub fn setup_player(
         Inventory::default(),
         Transform::from_translation(spawn_pos),
         RigidBody::Dynamic,
-        Collider::capsule(0.3, 3.0),
+        Collider::capsule(0.3, 2.0),
         Friction::new(0.1),
         TnuaController::<ControlScheme>::default(),
         TnuaConfig::<ControlScheme>(control_scheme_configs.add(ControlSchemeConfig {
             basis: TnuaBuiltinWalkConfig {
-                float_height: 2.0,
+                float_height: 1.5,
                 cling_distance: 0.0,
                 acceleration: 120.0,
                 air_acceleration: 60.0,
+                spring_strength: 200.0,
                 max_slope: f32::to_radians(80.0),
                 ..Default::default()
             },
@@ -80,7 +83,7 @@ pub fn setup_player(
                 ..Default::default()
             },
         })),
-        TnuaAvian3dSensorShape(Collider::cylinder(0.25, 0.0)),
+        TnuaAvian3dSensorShape(Collider::cylinder(0.2, 0.0)),
         LockedAxes::ROTATION_LOCKED,
     ));
 }
@@ -160,6 +163,7 @@ pub fn update_hover_target(
     mut target_text: Single<&mut Text, With<TargetText>>,
     nodes: Query<(&ResourceNode, &ItemStack)>,
     buildings: Query<(&Building, Option<&ProcessingStatus>, Option<&ItemStack>), (With<Building>,)>,
+    parent_query: Query<&ChildOf>,
 ) {
     target_text.0 = String::from("");
 
@@ -169,10 +173,16 @@ pub fn update_hover_target(
     }
     let hit = closest_hit.unwrap();
 
-    if let Ok((node, stack)) = nodes.get(hit.entity) {
+    // traverse parents, since colliders triggering hit may be on children
+    let mut entity = hit.entity;
+    while let Some(parent) = parent_query.get(entity).ok() {
+        entity = parent.0;
+    }
+
+    if let Ok((node, stack)) = nodes.get(entity) {
         // resource node
         target_text.0 = String::from(format!("{:?} ({:?}, {})", node, &stack.item, &stack.count));
-    } else if let Ok((building, status, stack)) = buildings.get(hit.entity) {
+    } else if let Ok((building, status, stack)) = buildings.get(entity) {
         // building
         if let Some(status) = status
             && let Some(stack) = stack
@@ -197,6 +207,7 @@ pub fn update_hover_action(
     mut action_text: Single<&mut Text, (With<ActionText>, Without<TargetText>)>,
     nodes: Query<&ResourceNode>,
     buildings: Query<&Building>,
+    parent_query: Query<&ChildOf>,
     held_building: Res<HeldBuilding>,
 ) {
     if held_building.0.is_some() {
@@ -211,7 +222,13 @@ pub fn update_hover_action(
     }
     let hit = closest_hit.unwrap();
 
-    if let Ok(_node) = nodes.get(hit.entity) {
+    // traverse parents, since colliders triggering hit may be on children
+    let mut entity = hit.entity;
+    while let Some(parent) = parent_query.get(entity).ok() {
+        entity = parent.0;
+    }
+
+    if let Ok(_node) = nodes.get(entity) {
         // resource node
         if player_status.mining_progress == 0.0 {
             action_text.0 = String::from(format!("[E] Mine"));
@@ -221,7 +238,7 @@ pub fn update_hover_action(
                 player_status.mining_progress * 100.0
             ));
         }
-    } else if let Ok(_building) = buildings.get(hit.entity) {
+    } else if let Ok(_building) = buildings.get(entity) {
         // building
         action_text.0 = String::from("[E] Open");
     }
@@ -234,6 +251,7 @@ pub fn update_interact(
     mut inventory: Single<&mut Inventory, With<Player>>,
     mut nodes: Query<(&ResourceNode, &mut ItemStack)>,
     mut buildings: Query<&Building>,
+    parent_query: Query<&ChildOf>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     held_building: Res<HeldBuilding>,
     time: Res<Time>,
@@ -250,8 +268,14 @@ pub fn update_interact(
     }
     let hit = closest_hit.unwrap();
 
+    // traverse parents, since colliders triggering hit may be on children
+    let mut entity = hit.entity;
+    while let Some(parent) = parent_query.get(entity).ok() {
+        entity = parent.0;
+    }
+
     // mine resource
-    if let Ok((_node, mut stack)) = nodes.get_mut(hit.entity)
+    if let Ok((_node, mut stack)) = nodes.get_mut(entity)
         && keyboard_input.pressed(KeyCode::KeyE)
         && stack.count > 0
     {
@@ -267,7 +291,7 @@ pub fn update_interact(
     }
 
     // open building menu
-    if let Ok(building) = buildings.get_mut(hit.entity) {
+    if let Ok(building) = buildings.get_mut(entity) {
         if keyboard_input.just_pressed(KeyCode::KeyE) {
             match building {
                 Building::Miner => {}
@@ -293,6 +317,7 @@ pub fn place_held_building(
     mut action_text: Single<&mut Text, With<ActionText>>,
     nodes: Query<(&ResourceNode, &Transform, &ItemStack)>,
     terrain: Query<&Terrain>,
+    parent_query: Query<&ChildOf>,
     mut held_building: ResMut<HeldBuilding>,
     asset_server: Res<AssetServer>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -319,10 +344,16 @@ pub fn place_held_building(
     }
     let hit = closest_hit.unwrap();
 
+    // traverse parents, since colliders triggering hit may be on children
+    let mut entity = hit.entity;
+    while let Some(parent) = parent_query.get(entity).ok() {
+        entity = parent.0;
+    }
+
     match building {
         Building::SatelliteDish => {
             // only placeable on terrain
-            if let Some(_terrain) = terrain.get(hit.entity).ok() {
+            if let Some(_terrain) = terrain.get(entity).ok() {
                 action_text.0 = String::from(format!("[E] Place {}\n[Q] Cancel", building.name()));
 
                 if keyboard_input.just_pressed(KeyCode::KeyE) {
@@ -344,18 +375,7 @@ pub fn place_held_building(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),
                         Transform::from_translation(pos).with_rotation(rot),
-                        Collider::compound(vec![
-                            (
-                                Vec3::new(0.0, 3.5, 0.0),
-                                Quat::default(),
-                                Collider::sphere(1.0),
-                            ),
-                            (
-                                Vec3::new(0.0, 0.0, 0.0),
-                                Quat::default(),
-                                Collider::cylinder(0.2, 5.0),
-                            ),
-                        ]),
+                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
                     ));
                     held_building.0 = None;
                 }
@@ -363,7 +383,7 @@ pub fn place_held_building(
         }
         Building::Miner { .. } => {
             // only placeable on ore
-            if let Some((node, transform, stack)) = nodes.get(hit.entity).ok() {
+            if let Some((node, transform, stack)) = nodes.get(entity).ok() {
                 match node {
                     ResourceNode::Ore => {
                         action_text.0 =
@@ -375,7 +395,7 @@ pub fn place_held_building(
                                     speed: 1.0,
                                     progress: 0.0,
                                 },
-                                AttachedNode(hit.entity),
+                                AttachedNode(entity),
                                 ItemStack {
                                     item: stack.item,
                                     count: 0,
@@ -385,11 +405,9 @@ pub fn place_held_building(
                                         .load::<Scene>(building.asset().to_owned() + "#Scene0"),
                                 ),
                                 transform.clone(),
-                                Collider::compound(vec![(
-                                    Vec3::new(0.0, 2.6, 0.0),
-                                    Quat::default(),
-                                    Collider::cylinder(1.1, 2.6),
-                                )]),
+                                ColliderConstructorHierarchy::new(
+                                    ColliderConstructor::TrimeshFromMesh,
+                                ),
                             ));
                             held_building.0 = None;
                         }
