@@ -125,7 +125,8 @@ fn main() {
             (
                 (
                     player::update_movement.in_set(TnuaUserControlsSystems),
-                    player::update_hover,
+                    player::update_hover_target,
+                    player::update_hover_action,
                     (
                         player::update_interact,
                         player::place_held_building,

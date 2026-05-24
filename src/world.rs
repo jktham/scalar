@@ -16,17 +16,12 @@ use rand::Rng;
 #[derive(Component)]
 pub struct Terrain;
 
-#[derive(Component)]
-pub struct ResourceNode;
-
-#[derive(Component)]
-pub struct Tree;
-
-#[derive(Component)]
-pub struct Stump;
-
-#[derive(Component)]
-pub struct Rock;
+#[derive(Component, Debug)]
+pub enum ResourceNode {
+    Ore,
+    Tree,
+    Rock,
+}
 
 const N_CHUNKS: i32 = 19;
 const N_TILES_X: i32 = 20; // should be even
@@ -187,7 +182,7 @@ pub fn setup_world(
             asset_server.load::<Scene>("node_copper.glb#Scene0")
         };
         commands.spawn((
-            ResourceNode,
+            ResourceNode::Ore,
             stack,
             SceneRoot(node.clone()),
             transform,
@@ -214,7 +209,7 @@ pub fn setup_world(
         let transform = Transform::from_translation(pos).with_rotation(rot);
         let node = asset_server.load::<Scene>("tree.glb#Scene0");
         commands.spawn((
-            Tree,
+            ResourceNode::Tree,
             stack,
             SceneRoot(node.clone()),
             transform,
@@ -246,7 +241,7 @@ pub fn setup_world(
         let variant = rng.random_range::<i32, _>(0..=2);
         let rock = asset_server.load::<Scene>(format!("rock_{}.glb#Scene0", variant));
         commands.spawn((
-            Rock,
+            ResourceNode::Rock,
             stack,
             SceneRoot(rock),
             transform,
@@ -261,28 +256,24 @@ pub fn setup_world(
 }
 
 pub fn update_world(
-    trees: Query<(Entity, &Transform, &ItemStack), With<Tree>>,
-    rocks: Query<(Entity, &Transform, &ItemStack), (With<Rock>, Without<Tree>)>,
     mut commands: Commands,
+    nodes: Query<(&ResourceNode, Entity, &Transform, &ItemStack)>,
     asset_server: Res<AssetServer>,
 ) {
-    // if tree is depleted, despawn it and spawn a stump
-    for (entity, transform, stack) in trees {
+    for (node, entity, transform, stack) in nodes {
         if stack.count <= 0 {
             commands.entity(entity).despawn();
-            commands.spawn((
-                Stump,
-                SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
-                *transform,
-                Collider::cylinder(0.5, 4.0),
-            ));
-        }
-    }
 
-    // if rock is depleted, despawn it
-    for (entity, _transform, stack) in rocks {
-        if stack.count <= 0 {
-            commands.entity(entity).despawn();
+            match node {
+                ResourceNode::Tree => {
+                    commands.spawn((
+                        SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
+                        *transform,
+                        Collider::cylinder(0.5, 4.0),
+                    ));
+                }
+                _ => {}
+            }
         }
     }
 }

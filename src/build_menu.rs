@@ -51,17 +51,32 @@ pub fn show_build_menu(mut commands: Commands) {
                     height: px(180),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(10),
                     ..default()
                 },
                 BackgroundColor(Color::BLACK),
-                children![(
-                    Text::new(format!("{:?}", building)),
-                    TextFont {
-                        font_size: 16.0,
-                        ..default()
-                    },
-                    TextColor(Color::WHITE),
-                )],
+                children![
+                    (
+                        Text::new(format!("{}", building.name())),
+                        TextFont {
+                            font_size: 16.0,
+                            ..default()
+                        },
+                        TextLayout::new(Justify::Center, LineBreak::WordBoundary),
+                        TextColor(Color::srgb(1.0, 1.0, 1.0)),
+                    ),
+                    (
+                        Text::new(format!("{}", building.description())),
+                        TextFont {
+                            font_size: 12.0,
+                            ..default()
+                        },
+                        TextLayout::new(Justify::Center, LineBreak::WordBoundary),
+                        TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                    )
+                ],
             )
         })
         .map(|c| commands.spawn(c).id())
