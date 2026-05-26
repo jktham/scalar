@@ -166,12 +166,12 @@ pub fn setup_world(
         let stack = if rng.random::<f32>() < 0.5 {
             ItemStack {
                 item: Item::Iron,
-                count: rng.random_range(1000..10000),
+                count: rng.random_range(10..100),
             }
         } else {
             ItemStack {
                 item: Item::Copper,
-                count: rng.random_range(1000..10000),
+                count: rng.random_range(10..100),
             }
         };
 

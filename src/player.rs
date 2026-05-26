@@ -1,8 +1,12 @@
+use crate::buildings::MiningNode;
+use crate::buildings::ProcessingStatus;
+use crate::buildings::RunningAnimation;
+use crate::effects::EffectMap;
 use crate::world::ResourceNode;
 use crate::world::Terrain;
 use crate::worldgen::WorldGen;
 use crate::{
-    buildings::{Building, ProcessingStatus},
+    buildings::{Building, Processing},
     hud::{ActionText, TargetText},
     inventory::{Inventory, ItemStack},
 };
@@ -27,6 +31,7 @@ use bevy::{
     math::{Quat, Vec3},
     transform::components::Transform,
 };
+use bevy_hanabi::ParticleEffect;
 use bevy_tnua::{
     TnuaConfig, TnuaController, TnuaScheme,
     builtins::{TnuaBuiltinJump, TnuaBuiltinJumpConfig, TnuaBuiltinWalk, TnuaBuiltinWalkConfig},
@@ -37,9 +42,9 @@ use bevy_tnua_avian3d::TnuaAvian3dSensorShape;
 pub struct Player;
 
 #[derive(Component)]
-pub struct PlayerStatus {
-    pub mining_speed: f32,
-    pub mining_progress: f32,
+pub struct PlayerProcessing {
+    pub speed: f32,
+    pub progress: f32,
 }
 
 #[derive(TnuaScheme)]
@@ -58,9 +63,9 @@ pub fn setup_player(
 
     commands.spawn((
         Player,
-        PlayerStatus {
-            mining_speed: 0.25,
-            mining_progress: 0.0,
+        PlayerProcessing {
+            speed: 0.25,
+            progress: 0.0,
         },
         Inventory::default(),
         Transform::from_translation(spawn_pos),
@@ -75,7 +80,7 @@ pub fn setup_player(
                 acceleration: 120.0,
                 air_acceleration: 60.0,
                 spring_strength: 200.0,
-                max_slope: f32::to_radians(80.0),
+                max_slope: f32::to_radians(60.0),
                 ..Default::default()
             },
             jump: TnuaBuiltinJumpConfig {
@@ -162,7 +167,7 @@ pub fn update_hover_target(
     player: Single<Entity, With<Player>>,
     mut target_text: Single<&mut Text, With<TargetText>>,
     nodes: Query<(&ResourceNode, &ItemStack)>,
-    buildings: Query<(&Building, Option<&ProcessingStatus>, Option<&ItemStack>), (With<Building>,)>,
+    buildings: Query<(&Building, Option<&Processing>, Option<&ItemStack>), (With<Building>,)>,
     parent_query: Query<&ChildOf>,
 ) {
     target_text.0 = String::from("");
@@ -203,7 +208,7 @@ pub fn update_hover_target(
 pub fn update_hover_action(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
-    player_status: Single<&PlayerStatus, With<Player>>,
+    player_status: Single<&PlayerProcessing, With<Player>>,
     mut action_text: Single<&mut Text, (With<ActionText>, Without<TargetText>)>,
     nodes: Query<&ResourceNode>,
     buildings: Query<&Building>,
@@ -230,12 +235,12 @@ pub fn update_hover_action(
 
     if let Ok(_node) = nodes.get(entity) {
         // resource node
-        if player_status.mining_progress == 0.0 {
+        if player_status.progress == 0.0 {
             action_text.0 = String::from(format!("[E] Mine"));
         } else {
             action_text.0 = String::from(format!(
                 "[E] Mine, {:0>2.0}%",
-                player_status.mining_progress * 100.0
+                player_status.progress * 100.0
             ));
         }
     } else if let Ok(_building) = buildings.get(entity) {
@@ -247,7 +252,7 @@ pub fn update_hover_action(
 pub fn update_interact(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
-    mut player_status: Single<&mut PlayerStatus, With<Player>>,
+    mut player_status: Single<&mut PlayerProcessing, With<Player>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
     mut nodes: Query<(&ResourceNode, &mut ItemStack)>,
     mut buildings: Query<&Building>,
@@ -257,13 +262,13 @@ pub fn update_interact(
     time: Res<Time>,
 ) {
     if held_building.0.is_some() {
-        player_status.mining_progress = 0.0;
+        player_status.progress = 0.0;
         return; // if player is holding a building, don't interact with world
     }
 
     let closest_hit = get_closest_hit(&camera_rayhits, vec![player.entity()]);
     if closest_hit.is_none() {
-        player_status.mining_progress = 0.0;
+        player_status.progress = 0.0;
         return;
     }
     let hit = closest_hit.unwrap();
@@ -279,15 +284,15 @@ pub fn update_interact(
         && keyboard_input.pressed(KeyCode::KeyE)
         && stack.count > 0
     {
-        player_status.mining_progress += time.delta_secs() * player_status.mining_speed;
-        if player_status.mining_progress >= 1.0 {
-            let amount = i32::min(stack.count, player_status.mining_progress.floor() as i32);
+        player_status.progress += time.delta_secs() * player_status.speed;
+        if player_status.progress >= 1.0 {
+            let amount = i32::min(stack.count, player_status.progress.floor() as i32);
             stack.count -= amount;
             inventory.add(&stack.item, amount);
-            player_status.mining_progress = player_status.mining_progress.fract();
+            player_status.progress = player_status.progress.fract();
         }
     } else {
-        player_status.mining_progress = 0.0;
+        player_status.progress = 0.0;
     }
 
     // open building menu
@@ -305,10 +310,6 @@ pub fn update_interact(
 /// The building the player is currently holding and about to place, if any
 pub struct HeldBuilding(pub Option<Building>);
 
-#[derive(Component)]
-/// node the miner is attached to
-pub struct AttachedNode(pub Entity);
-
 pub fn place_held_building(
     mut commands: Commands,
     camera_rayhits: Single<&RayHits, With<Camera>>,
@@ -322,6 +323,8 @@ pub fn place_held_building(
     asset_server: Res<AssetServer>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     worldgen: Res<WorldGen>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    effect_map: Res<EffectMap>,
 ) {
     if keyboard_input.just_pressed(KeyCode::KeyQ) {
         held_building.0 = None; // cancel building placement if Q is pressed
@@ -367,7 +370,8 @@ pub fn place_held_building(
 
                     commands.spawn((
                         Building::SatelliteDish,
-                        ProcessingStatus {
+                        Processing {
+                            status: ProcessingStatus::Idle,
                             speed: 1.0,
                             progress: 0.0,
                         },
@@ -389,13 +393,22 @@ pub fn place_held_building(
                         action_text.0 =
                             String::from(format!("[E] Place {}\n[Q] Cancel", building.name()));
                         if keyboard_input.just_pressed(KeyCode::KeyE) {
+                            let (graph, index) =
+                                AnimationGraph::from_clip(asset_server.load::<AnimationClip>(
+                                    building.asset().to_owned() + "#Animation0",
+                                ));
+                            let graph_handle = graphs.add(graph);
+
+                            let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
+
                             commands.spawn((
                                 Building::Miner,
-                                ProcessingStatus {
-                                    speed: 1.0,
+                                Processing {
+                                    status: ProcessingStatus::Idle,
+                                    speed: 0.5,
                                     progress: 0.0,
                                 },
-                                AttachedNode(entity),
+                                MiningNode(entity),
                                 ItemStack {
                                     item: stack.item,
                                     count: 0,
@@ -404,6 +417,8 @@ pub fn place_held_building(
                                     asset_server
                                         .load::<Scene>(building.asset().to_owned() + "#Scene0"),
                                 ),
+                                RunningAnimation(graph_handle, index),
+                                ParticleEffect::new(smoke_handle),
                                 transform.clone(),
                                 ColliderConstructorHierarchy::new(
                                     ColliderConstructor::TrimeshFromMesh,

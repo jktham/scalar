@@ -5,7 +5,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions, PresentMode, WindowResolution},
 };
 use bevy_framepace::FramepacePlugin;
-use bevy_obj::ObjPlugin;
+use bevy_hanabi::prelude::*;
 use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 
@@ -13,6 +13,7 @@ use crate::player::HeldBuilding;
 
 mod build_menu;
 mod buildings;
+mod effects;
 mod environment;
 mod hud;
 mod inventory;
@@ -101,15 +102,16 @@ fn main() {
                     },
                 },
             },
-            ObjPlugin,
             PhysicsPlugins::default(),
             TnuaControllerPlugin::<player::ControlScheme>::new(FixedUpdate),
             TnuaAvian3dPlugin::new(FixedUpdate),
             FramepacePlugin,
+            HanabiPlugin,
         ))
         .init_state::<GameState>()
         .insert_resource(player::HeldBuilding(None))
         .insert_resource(worldgen::WorldGen::generate())
+        .insert_resource(effects::EffectMap::default())
         .add_systems(
             Startup,
             (
@@ -118,6 +120,7 @@ fn main() {
                 world::setup_world,
                 environment::setup_environment,
                 hud::setup_hud,
+                effects::create_smoke_effect,
             ),
         )
         .add_systems(
@@ -134,6 +137,8 @@ fn main() {
                     )
                         .chain(),
                     hud::draw_inventory,
+                    buildings::update_building_animations,
+                    buildings::update_building_effects,
                 )
                     .run_if(in_state(GameState::Play)),
                 (pause_menu::pause_menu_interact).run_if(in_state(GameState::PauseMenu)),
