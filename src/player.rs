@@ -2,6 +2,7 @@ use crate::GameState;
 use crate::buildings::MiningNode;
 use crate::buildings::ProcessingStatus;
 use crate::buildings::RunningAnimation;
+use crate::buildings::RunningParticles;
 use crate::effects::EffectMap;
 use crate::world::ResourceNode;
 use crate::world::Terrain;
@@ -408,10 +409,14 @@ pub fn place_held_building(
                         SceneRoot(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),
-                        RunningAnimation(graph_handle, index),
-                        ParticleEffect::new(smoke_handle),
                         *transform,
                         ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                        RunningAnimation(graph_handle, index),
+                        children![(
+                            RunningParticles,
+                            ParticleEffect::new(smoke_handle),
+                            Transform::from_translation(Vec3::new(0.0, 3.0, 0.0))
+                        )],
                     ));
                     held_building.0 = None;
                 }

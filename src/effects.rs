@@ -13,13 +13,13 @@ pub fn create_smoke_effect(
     mut effect_map: ResMut<EffectMap>,
 ) {
     let mut gradient = Gradient::new();
-    gradient.add_key(0.0, Vec4::new(0., 0., 0., 1.));
-    gradient.add_key(1.0, Vec4::splat(0.));
+    gradient.add_key(0.0, Vec4::new(0.0, 0.0, 0.0, 0.8));
+    gradient.add_key(1.0, Vec4::splat(0.0));
 
     let writer = ExprWriter::new();
 
     let init_pos = SetPositionSphereModifier {
-        center: writer.lit(Vec3::ZERO).expr(),
+        center: writer.lit(Vec3::new(0.0, 0.0, 0.0)).expr(),
         radius: writer.lit(0.8).expr(),
         dimension: ShapeDimension::Surface,
     };
@@ -42,14 +42,29 @@ pub fn create_smoke_effect(
     let init_rot_z = SetAttributeModifier::new(Attribute::AXIS_Z, axis_z.expr());
 
     let y = writer.lit(3.0).uniform(writer.lit(6.0));
-    let v = zero.clone().vec3(y, zero);
+    let x = writer.lit(-0.2).uniform(writer.lit(0.2));
+    let z = writer.lit(-0.2).uniform(writer.lit(0.2));
+    let v = x.clone().vec3(y, z);
     let init_vel = SetAttributeModifier::new(Attribute::VELOCITY, v.expr());
 
-    let s = writer.lit(0.8);
-    let init_scale = SetAttributeModifier::new(Attribute::SIZE, s.expr());
-
-    let lifetime = writer.lit(10.).expr();
+    let lifetime = writer.lit(30.0).expr();
     let init_lifetime = SetAttributeModifier::new(Attribute::LIFETIME, lifetime);
+
+    let s = writer.lit(0.0);
+    let init_size = SetAttributeModifier::new(Attribute::F32_0, s.expr());
+
+    let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.0).expr());
+    let update_size = SetAttributeModifier::new(
+        Attribute::SIZE,
+        writer
+            .attr(Attribute::F32_0)
+            .add(
+                writer
+                    .lit(0.8)
+                    .add((writer.attr(Attribute::AGE)).mul(writer.lit(0.2))),
+            )
+            .expr(),
+    );
 
     let name = "smoke";
     let effect = EffectAsset::new(1000, SpawnerSettings::rate(10.0.into()), writer.finish())
@@ -59,8 +74,10 @@ pub fn create_smoke_effect(
         .init(init_rot_y)
         .init(init_rot_z)
         .init(init_vel)
-        .init(init_scale)
+        .init(init_size)
         .init(init_lifetime)
+        .init(init_age)
+        .update(update_size)
         .render(ColorOverLifetimeModifier {
             gradient,
             ..default()

@@ -41,6 +41,10 @@ pub struct MiningNode(pub Entity);
 /// animation to play when building runs
 pub struct RunningAnimation(pub Handle<AnimationGraph>, pub AnimationNodeIndex);
 
+#[derive(Component)]
+/// marker on child with particle effect spawner to activate when building runs
+pub struct RunningParticles;
+
 #[derive(Debug)]
 pub enum ProcessingStatus {
     Idle,
@@ -145,20 +149,24 @@ pub fn update_building_animations(
 }
 
 pub fn update_building_effects(
-    mut buildings: Query<(&Building, Option<&Processing>, Option<&mut EffectSpawner>)>,
+    mut buildings: Query<(Entity, &Building, Option<&Processing>)>,
+    children: Query<&Children>,
+    mut effect_spawners: Query<&mut EffectSpawner, With<RunningParticles>>,
 ) {
-    for (building, processing, effect_spawner) in buildings.iter_mut() {
+    for (entity, building, processing) in buildings.iter_mut() {
         match building {
             Building::Miner => {
-                if let Some(processing) = processing
-                    && let Some(mut effect_spawner) = effect_spawner
-                {
-                    match processing.status {
-                        ProcessingStatus::Running => {
-                            effect_spawner.active = true;
-                        }
-                        ProcessingStatus::Idle => {
-                            effect_spawner.active = false;
+                for child in children.iter_descendants(entity) {
+                    if let Some(processing) = processing
+                        && let Ok(mut spawner) = effect_spawners.get_mut(child)
+                    {
+                        match processing.status {
+                            ProcessingStatus::Running => {
+                                spawner.active = true;
+                            }
+                            ProcessingStatus::Idle => {
+                                spawner.active = false;
+                            }
                         }
                     }
                 }

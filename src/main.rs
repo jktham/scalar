@@ -2,7 +2,7 @@ use avian3d::prelude::*;
 use bevy::{
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
     prelude::*,
-    window::{CursorGrabMode, CursorOptions, PresentMode, WindowResolution},
+    window::{CursorGrabMode, CursorOptions, PresentMode, PrimaryWindow, WindowResolution},
 };
 use bevy_framepace::FramepacePlugin;
 use bevy_hanabi::prelude::*;
@@ -35,7 +35,13 @@ fn cursor_grab(mut cursor_options: Single<&mut CursorOptions>) {
     cursor_options.visible = false;
 }
 
-fn cursor_ungrab(mut cursor_options: Single<&mut CursorOptions>) {
+fn cursor_ungrab(
+    mut cursor_options: Single<&mut CursorOptions>,
+    mut window: Single<&mut Window, With<PrimaryWindow>>,
+) {
+    let size = window.size();
+    window.set_cursor_position(Some(size / 2.0));
+
     cursor_options.grab_mode = CursorGrabMode::None;
     cursor_options.visible = true;
 }
