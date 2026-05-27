@@ -12,7 +12,7 @@ use image::ColorType;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 fn smoothstep(a: f32, b: f32, w: f32) -> f32 {
-    return (b - a) * (3.0 - w * 2.0) * w * w + a;
+    (b - a) * (3.0 - w * 2.0) * w * w + a
 }
 
 /// deterministic random gradient for each grid coordinate
@@ -21,16 +21,15 @@ fn random_gradient(ix: i32, iy: i32) -> Vec2 {
     let mut prng = Rng::with_seed(seed);
 
     let r = prng.f32() * PI * 2.0 - PI; // [-pi, pi)
-    let gradient = Vec2::new(fast::cos(r), fast::sin(r));
 
-    gradient
+    Vec2::new(fast::cos(r), fast::sin(r))
 }
 
 fn dot_grid_gradient(ix: i32, iy: i32, x: f32, y: f32) -> f32 {
     let gradient = random_gradient(ix, iy);
     let dx = x - ix as f32;
     let dy = y - iy as f32;
-    return dx * gradient.x + dy * gradient.y;
+    dx * gradient.x + dy * gradient.y
 }
 
 /// perlin noise implementation stolen from https://en.wikipedia.org/w/index.php?title=Perlin_noise&oldid=1230993513 <3
@@ -55,7 +54,7 @@ pub fn perlin(x: f32, y: f32) -> f32 {
     let n3 = dot_grid_gradient(x1, y1, x, y);
     let ix1 = smoothstep(n2, n3, sx);
 
-    return smoothstep(ix0, ix1, sy) * 0.5 + 0.5; // [0, 1]
+    smoothstep(ix0, ix1, sy) * 0.5 + 0.5 // [0, 1]
 }
 
 /// returns height in \[0, 1\]
@@ -77,7 +76,7 @@ pub fn perlin_octaves(x: f32, y: f32, octaves: u32, lacunarity: f32, persistence
 }
 
 /// get value at float coordinate in array via bilinear interpolation
-pub fn bilinear_interp<T>(x: f32, z: f32, arr: &Vec<T>) -> T
+pub fn bilinear_interp<T>(x: f32, z: f32, arr: &[T]) -> T
 where
     T: Copy,
     T: Mul<f32, Output = T>,
@@ -98,9 +97,8 @@ where
 
     let fx0 = f00 * (1.0 - dx) + f10 * dx;
     let fx1 = f01 * (1.0 - dx) + f11 * dx;
-    let fxz = fx0 * (1.0 - dz) + fx1 * dz;
 
-    fxz
+    fx0 * (1.0 - dz) + fx1 * dz
 }
 
 pub const TERRAIN_N: usize = 1000; // n*n array size
@@ -247,14 +245,13 @@ impl WorldGen {
             path.join("normal.png"),
             self.normal
                 .iter()
-                .map(|v| {
+                .flat_map(|v| {
                     [
                         (v.x * 255.0) as u8,
                         (v.y * 255.0) as u8,
                         (v.z * 255.0) as u8,
                     ]
                 })
-                .flatten()
                 .collect::<Vec<u8>>()
                 .as_slice(),
             TERRAIN_N as u32,

@@ -6,29 +6,29 @@ use crate::{inventory::ItemStack, world::ResourceNode};
 
 #[derive(Component, Copy, Clone, EnumIter, Debug)]
 pub enum Building {
-    SatelliteDish,
     Miner,
+    SatelliteDish,
 }
 
 impl Building {
     pub fn name(&self) -> &str {
         match self {
-            Building::SatelliteDish => "Satellite Dish",
             Building::Miner => "Miner",
+            Building::SatelliteDish => "Satellite Dish",
         }
     }
 
     pub fn asset(&self) -> &str {
         match self {
-            Building::SatelliteDish => "satellite_dish.glb",
             Building::Miner => "miner.glb",
+            Building::SatelliteDish => "satellite_dish.glb",
         }
     }
 
     pub fn description(&self) -> &str {
         match self {
-            Building::SatelliteDish => "Sends images into the stars :)",
             Building::Miner => "Can be placed on a resource node to automatically mine it",
+            Building::SatelliteDish => "Sends images into the stars :)",
         }
     }
 }

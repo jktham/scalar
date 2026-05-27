@@ -27,12 +27,9 @@ pub fn build_menu_interact(
     }
 
     for (interaction, build_button) in build_buttons {
-        match *interaction {
-            Interaction::Pressed => {
-                held_building.0 = Some(build_button.0);
-                next_state.set(GameState::Play);
-            }
-            _ => (),
+        if *interaction == Interaction::Pressed {
+            held_building.0 = Some(build_button.0);
+            next_state.set(GameState::Play);
         }
     }
 }
@@ -59,7 +56,7 @@ pub fn show_build_menu(mut commands: Commands) {
                 BackgroundColor(Color::BLACK),
                 children![
                     (
-                        Text::new(format!("{}", building.name())),
+                        Text::new(building.name().to_string()),
                         TextFont {
                             font_size: 16.0,
                             ..default()
@@ -68,7 +65,7 @@ pub fn show_build_menu(mut commands: Commands) {
                         TextColor(Color::srgb(1.0, 1.0, 1.0)),
                     ),
                     (
-                        Text::new(format!("{}", building.description())),
+                        Text::new(building.description().to_string()),
                         TextFont {
                             font_size: 12.0,
                             ..default()

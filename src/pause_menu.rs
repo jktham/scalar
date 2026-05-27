@@ -27,20 +27,16 @@ pub fn pause_menu_interact(
         }
     }
 
-    match *continue_button {
-        Interaction::Pressed => next_state.set(GameState::Play),
-        _ => (),
+    if *continue_button == &Interaction::Pressed {
+        next_state.set(GameState::Play)
     }
 
-    match *settings_button {
-        _ => (),
+    if *settings_button == &Interaction::Pressed {
+        // todo
     }
 
-    match *quit_button {
-        Interaction::Pressed => {
-            writer.write(AppExit::Success);
-        }
-        _ => (),
+    if *quit_button == &Interaction::Pressed {
+        writer.write(AppExit::Success);
     }
 }
 

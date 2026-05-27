@@ -133,7 +133,6 @@ pub fn update_movement(
         desired_forward: Some(Dir3::new_unchecked(
             Vec3::new(front.x, 0.0, front.z).normalize(),
         )),
-        ..Default::default()
     };
     if keyboard_input.pressed(KeyCode::Space) {
         player_controller.action(ControlScheme::Jump(Default::default()));
@@ -162,6 +161,26 @@ fn get_closest_hit(rayhits: &RayHits, ignored: Vec<Entity>) -> Option<RayHitData
     closest_hit
 }
 
+fn get_closest_hit_entity(
+    rayhits: &RayHits,
+    ignored: Vec<Entity>,
+    parents: Query<&ChildOf>,
+) -> Option<(RayHitData, Entity)> {
+    let closest_hit = get_closest_hit(rayhits, ignored);
+    if closest_hit.is_none() {
+        return None; // no target
+    }
+    let hit = closest_hit.unwrap();
+
+    // traverse parents, since colliders triggering hit may be on children
+    let mut entity = hit.entity;
+    while let Ok(parent) = parents.get(entity) {
+        entity = parent.0;
+    }
+
+    Some((hit, entity))
+}
+
 pub fn update_hover_target(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
@@ -172,35 +191,29 @@ pub fn update_hover_target(
 ) {
     target_text.0 = String::from("");
 
-    let closest_hit = get_closest_hit(&camera_rayhits, vec![player.entity()]);
+    let closest_hit = get_closest_hit_entity(&camera_rayhits, vec![player.entity()], parent_query);
     if closest_hit.is_none() {
         return; // no target
     }
-    let hit = closest_hit.unwrap();
-
-    // traverse parents, since colliders triggering hit may be on children
-    let mut entity = hit.entity;
-    while let Some(parent) = parent_query.get(entity).ok() {
-        entity = parent.0;
-    }
+    let (_hit, entity) = closest_hit.unwrap();
 
     if let Ok((node, stack)) = nodes.get(entity) {
         // resource node
-        target_text.0 = String::from(format!("{:?} ({:?}, {})", node, &stack.item, &stack.count));
+        target_text.0 = format!("{:?} ({:?}, {})", node, stack.item, stack.count);
     } else if let Ok((building, status, stack)) = buildings.get(entity) {
         // building
         if let Some(status) = status
             && let Some(stack) = stack
         {
-            target_text.0 = String::from(format!(
+            target_text.0 = format!(
                 "{} ({:?}, {}), {:0>2.0}%",
-                &building.name(),
-                &stack.item,
-                &stack.count,
+                building.name(),
+                stack.item,
+                stack.count,
                 status.progress * 100.0
-            ));
+            );
         } else {
-            target_text.0 = String::from(format!("{}", &building.name(),));
+            target_text.0 = building.name().to_string();
         }
     }
 }
@@ -221,27 +234,18 @@ pub fn update_hover_action(
 
     action_text.0 = String::from("");
 
-    let closest_hit = get_closest_hit(&camera_rayhits, vec![player.entity()]);
+    let closest_hit = get_closest_hit_entity(&camera_rayhits, vec![player.entity()], parent_query);
     if closest_hit.is_none() {
-        return;
+        return; // no target
     }
-    let hit = closest_hit.unwrap();
-
-    // traverse parents, since colliders triggering hit may be on children
-    let mut entity = hit.entity;
-    while let Some(parent) = parent_query.get(entity).ok() {
-        entity = parent.0;
-    }
+    let (_hit, entity) = closest_hit.unwrap();
 
     if let Ok(_node) = nodes.get(entity) {
         // resource node
         if player_status.progress == 0.0 {
-            action_text.0 = String::from(format!("[E] Mine"));
+            action_text.0 = "[E] Mine".to_string();
         } else {
-            action_text.0 = String::from(format!(
-                "[E] Mine, {:0>2.0}%",
-                player_status.progress * 100.0
-            ));
+            action_text.0 = format!("[E] Mine, {:0>2.0}%", player_status.progress * 100.0);
         }
     } else if let Ok(_building) = buildings.get(entity) {
         // building
@@ -266,18 +270,12 @@ pub fn update_interact(
         return; // if player is holding a building, don't interact with world
     }
 
-    let closest_hit = get_closest_hit(&camera_rayhits, vec![player.entity()]);
+    let closest_hit = get_closest_hit_entity(&camera_rayhits, vec![player.entity()], parent_query);
     if closest_hit.is_none() {
         player_status.progress = 0.0;
         return;
     }
-    let hit = closest_hit.unwrap();
-
-    // traverse parents, since colliders triggering hit may be on children
-    let mut entity = hit.entity;
-    while let Some(parent) = parent_query.get(entity).ok() {
-        entity = parent.0;
-    }
+    let (_hit, entity) = closest_hit.unwrap();
 
     // mine resource
     if let Ok((_node, mut stack)) = nodes.get_mut(entity)
@@ -296,12 +294,14 @@ pub fn update_interact(
     }
 
     // open building menu
-    if let Ok(building) = buildings.get_mut(entity) {
-        if keyboard_input.just_pressed(KeyCode::KeyE) {
-            match building {
-                Building::Miner => {}
-                _ => {}
+    if let Ok(building) = buildings.get_mut(entity)
+        && keyboard_input.just_pressed(KeyCode::KeyE)
+    {
+        match building {
+            Building::Miner => {
+                // todo
             }
+            _ => {}
         }
     }
 }
@@ -336,28 +336,58 @@ pub fn place_held_building(
     }
     let building = held_building.0.unwrap();
 
-    action_text.0 = String::from(format!(
-        "[E] Can't place {} here\n[Q] Cancel",
-        building.name()
-    ));
+    action_text.0 = format!("[E] Can't place {} here\n[Q] Cancel", building.name());
 
-    let closest_hit = get_closest_hit(&camera_rayhits, vec![player.entity()]);
+    let closest_hit = get_closest_hit_entity(&camera_rayhits, vec![player.entity()], parent_query);
     if closest_hit.is_none() {
         return;
     }
-    let hit = closest_hit.unwrap();
-
-    // traverse parents, since colliders triggering hit may be on children
-    let mut entity = hit.entity;
-    while let Some(parent) = parent_query.get(entity).ok() {
-        entity = parent.0;
-    }
+    let (hit, entity) = closest_hit.unwrap();
 
     match building {
+        Building::Miner => {
+            // only placeable on ore
+            if let Ok((node, transform, stack)) = nodes.get(entity)
+                && let ResourceNode::Ore = node
+            {
+                action_text.0 = format!("[E] Place {}\n[Q] Cancel", building.name());
+                if keyboard_input.just_pressed(KeyCode::KeyE) {
+                    let (graph, index) = AnimationGraph::from_clip(
+                        asset_server
+                            .load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
+                    );
+                    let graph_handle = graphs.add(graph);
+
+                    let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
+
+                    commands.spawn((
+                        Building::Miner,
+                        Processing {
+                            status: ProcessingStatus::Idle,
+                            speed: 0.5,
+                            progress: 0.0,
+                        },
+                        MiningNode(entity),
+                        ItemStack {
+                            item: stack.item,
+                            count: 0,
+                        },
+                        SceneRoot(
+                            asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
+                        ),
+                        RunningAnimation(graph_handle, index),
+                        ParticleEffect::new(smoke_handle),
+                        *transform,
+                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                    ));
+                    held_building.0 = None;
+                }
+            }
+        }
         Building::SatelliteDish => {
             // only placeable on terrain
-            if let Some(_terrain) = terrain.get(entity).ok() {
-                action_text.0 = String::from(format!("[E] Place {}\n[Q] Cancel", building.name()));
+            if let Ok(_terrain) = terrain.get(entity) {
+                action_text.0 = format!("[E] Place {}\n[Q] Cancel", building.name());
 
                 if keyboard_input.just_pressed(KeyCode::KeyE) {
                     let pos =
@@ -382,52 +412,6 @@ pub fn place_held_building(
                         ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
                     ));
                     held_building.0 = None;
-                }
-            }
-        }
-        Building::Miner { .. } => {
-            // only placeable on ore
-            if let Some((node, transform, stack)) = nodes.get(entity).ok() {
-                match node {
-                    ResourceNode::Ore => {
-                        action_text.0 =
-                            String::from(format!("[E] Place {}\n[Q] Cancel", building.name()));
-                        if keyboard_input.just_pressed(KeyCode::KeyE) {
-                            let (graph, index) =
-                                AnimationGraph::from_clip(asset_server.load::<AnimationClip>(
-                                    building.asset().to_owned() + "#Animation0",
-                                ));
-                            let graph_handle = graphs.add(graph);
-
-                            let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
-
-                            commands.spawn((
-                                Building::Miner,
-                                Processing {
-                                    status: ProcessingStatus::Idle,
-                                    speed: 0.5,
-                                    progress: 0.0,
-                                },
-                                MiningNode(entity),
-                                ItemStack {
-                                    item: stack.item,
-                                    count: 0,
-                                },
-                                SceneRoot(
-                                    asset_server
-                                        .load::<Scene>(building.asset().to_owned() + "#Scene0"),
-                                ),
-                                RunningAnimation(graph_handle, index),
-                                ParticleEffect::new(smoke_handle),
-                                transform.clone(),
-                                ColliderConstructorHierarchy::new(
-                                    ColliderConstructor::TrimeshFromMesh,
-                                ),
-                            ));
-                            held_building.0 = None;
-                        }
-                    }
-                    _ => {}
                 }
             }
         }
