@@ -9,9 +9,8 @@ use bevy_hanabi::prelude::*;
 use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 
-use crate::player::HeldBuilding;
-
 mod build_menu;
+mod building_menu;
 mod buildings;
 mod effects;
 mod environment;
@@ -22,12 +21,13 @@ mod player;
 mod world;
 mod worldgen;
 
-#[derive(States, Clone, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(States, Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum GameState {
     #[default]
     Play,
     PauseMenu,
     BuildMenu,
+    BuildingMenu,
 }
 
 fn cursor_grab(mut cursor_options: Single<&mut CursorOptions>) {
@@ -38,30 +38,6 @@ fn cursor_grab(mut cursor_options: Single<&mut CursorOptions>) {
 fn cursor_ungrab(mut cursor_options: Single<&mut CursorOptions>) {
     cursor_options.grab_mode = CursorGrabMode::None;
     cursor_options.visible = true;
-}
-
-fn handle_menu_keys(
-    state: ResMut<State<GameState>>,
-    mut next_state: ResMut<NextState<GameState>>,
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-    held_building: ResMut<HeldBuilding>,
-) {
-    if keyboard_input.just_pressed(KeyCode::Escape) {
-        let next = match state.get() {
-            GameState::Play => GameState::PauseMenu,
-            GameState::PauseMenu | GameState::BuildMenu => GameState::Play,
-        };
-        next_state.set(next);
-    }
-
-    if keyboard_input.just_pressed(KeyCode::KeyQ) && held_building.0.is_none() {
-        let next = match state.get() {
-            GameState::Play => GameState::BuildMenu,
-            GameState::BuildMenu => GameState::Play,
-            _ => return,
-        };
-        next_state.set(next);
-    }
 }
 
 fn pause_time(mut time: ResMut<Time<Virtual>>) {
@@ -110,6 +86,7 @@ fn main() {
         ))
         .init_state::<GameState>()
         .insert_resource(player::HeldBuilding(None))
+        .insert_resource(player::OpenBuilding(None))
         .insert_resource(worldgen::WorldGen::generate())
         .insert_resource(effects::EffectMap::default())
         .add_systems(
@@ -143,7 +120,7 @@ fn main() {
                     .run_if(in_state(GameState::Play)),
                 (pause_menu::pause_menu_interact).run_if(in_state(GameState::PauseMenu)),
                 (build_menu::build_menu_interact).run_if(in_state(GameState::BuildMenu)),
-                handle_menu_keys,
+                (building_menu::building_menu_interact).run_if(in_state(GameState::BuildingMenu)),
             ),
         )
         .add_systems(FixedUpdate, buildings::update_buildings)
@@ -162,6 +139,14 @@ fn main() {
         .add_systems(
             OnExit(GameState::BuildMenu),
             (unpause_time, cursor_grab, build_menu::hide_build_menu),
+        )
+        .add_systems(
+            OnEnter(GameState::BuildingMenu),
+            (pause_time, cursor_ungrab, building_menu::show_building_menu),
+        )
+        .add_systems(
+            OnExit(GameState::BuildingMenu),
+            (unpause_time, cursor_grab, building_menu::hide_building_menu),
         )
         .run();
 }

@@ -1,3 +1,4 @@
+use crate::GameState;
 use crate::buildings::MiningNode;
 use crate::buildings::ProcessingStatus;
 use crate::buildings::RunningAnimation;
@@ -249,22 +250,46 @@ pub fn update_hover_action(
         }
     } else if let Ok(_building) = buildings.get(entity) {
         // building
-        action_text.0 = String::from("[E] Open");
+        if player_status.progress == 0.0 {
+            action_text.0 = String::from("[E] Open\n[F] Deconstruct");
+        } else {
+            action_text.0 = format!(
+                "[E] Open\n[F] Deconstruct, {:0>2.0}%",
+                player_status.progress * 100.0
+            );
+        }
     }
 }
 
+#[derive(Resource)]
+/// Building ui currently opened
+pub struct OpenBuilding(pub Option<Entity>);
+
 pub fn update_interact(
+    mut commands: Commands,
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
     mut player_status: Single<&mut PlayerProcessing, With<Player>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
     mut nodes: Query<(&ResourceNode, &mut ItemStack)>,
-    mut buildings: Query<&Building>,
+    mut buildings: Query<(&Building, Entity)>,
     parent_query: Query<&ChildOf>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     held_building: Res<HeldBuilding>,
+    mut open_building: ResMut<OpenBuilding>,
+    mut next_state: ResMut<NextState<GameState>>,
     time: Res<Time>,
 ) {
+    if keyboard_input.just_pressed(KeyCode::Escape) {
+        next_state.set(GameState::PauseMenu);
+        return;
+    }
+
+    if keyboard_input.just_pressed(KeyCode::KeyQ) && held_building.0.is_none() {
+        next_state.set(GameState::BuildMenu);
+        return;
+    }
+
     if held_building.0.is_some() {
         player_status.progress = 0.0;
         return; // if player is holding a building, don't interact with world
@@ -289,25 +314,33 @@ pub fn update_interact(
             inventory.add(&stack.item, amount);
             player_status.progress = player_status.progress.fract();
         }
+    } else if let Ok((_building, entity)) = buildings.get_mut(entity) // deconstruct building
+        && keyboard_input.pressed(KeyCode::KeyF)
+    {
+        player_status.progress += time.delta_secs() * player_status.speed;
+        if player_status.progress >= 1.0 {
+            commands.entity(entity).despawn();
+            player_status.progress = 0.0;
+        }
     } else {
         player_status.progress = 0.0;
     }
 
     // open building menu
-    if let Ok(building) = buildings.get_mut(entity)
+    if let Ok((building, entity)) = buildings.get_mut(entity)
         && keyboard_input.just_pressed(KeyCode::KeyE)
     {
         match building {
-            Building::Miner => {
-                // todo
+            Building::Miner | Building::SatelliteDish => {
+                open_building.0 = Some(entity);
+                next_state.set(GameState::BuildingMenu);
             }
-            _ => {}
         }
     }
 }
 
 #[derive(Resource)]
-/// The building the player is currently holding and about to place, if any
+/// The type of building the player is currently holding and about to place, if any
 pub struct HeldBuilding(pub Option<Building>);
 
 pub fn place_held_building(

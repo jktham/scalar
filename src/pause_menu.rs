@@ -10,6 +10,7 @@ pub fn pause_menu_interact(
     continue_button: Single<&Interaction, With<ContinueButton>>,
     settings_button: Single<&Interaction, With<SettingsButton>>,
     quit_button: Single<&Interaction, With<QuitButton>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
     mut writer: MessageWriter<AppExit>,
 ) {
@@ -27,7 +28,7 @@ pub fn pause_menu_interact(
         }
     }
 
-    if *continue_button == &Interaction::Pressed {
+    if *continue_button == &Interaction::Pressed || keyboard_input.just_pressed(KeyCode::Escape) {
         next_state.set(GameState::Play)
     }
 

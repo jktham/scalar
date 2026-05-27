@@ -41,6 +41,7 @@ pub struct MiningNode(pub Entity);
 /// animation to play when building runs
 pub struct RunningAnimation(pub Handle<AnimationGraph>, pub AnimationNodeIndex);
 
+#[derive(Debug)]
 pub enum ProcessingStatus {
     Idle,
     Running,
@@ -120,9 +121,11 @@ pub fn update_building_animations(
                                 if let Ok(mut player) = players.get_mut(child) {
                                     player.play(running_animation.1).repeat();
 
-                                    commands.entity(child).insert_if_new(AnimationGraphHandle(
-                                        running_animation.0.clone(),
-                                    ));
+                                    commands
+                                        .entity(child)
+                                        .try_insert_if_new(AnimationGraphHandle(
+                                            running_animation.0.clone(),
+                                        ));
                                 }
                             }
                         }

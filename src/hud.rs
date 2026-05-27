@@ -26,6 +26,7 @@ pub fn setup_hud(mut commands: Commands) {
             top: px(60),
             ..default()
         },
+        ZIndex(-10),
     ));
 
     commands.spawn((
@@ -39,6 +40,7 @@ pub fn setup_hud(mut commands: Commands) {
             margin: UiRect::all(auto()),
             ..default()
         },
+        ZIndex(-10),
     ));
 
     commands.spawn((
@@ -57,6 +59,7 @@ pub fn setup_hud(mut commands: Commands) {
             },
             ..default()
         },
+        ZIndex(-10),
     ));
 
     commands.spawn((
@@ -75,6 +78,7 @@ pub fn setup_hud(mut commands: Commands) {
             },
             ..default()
         },
+        ZIndex(-10),
     ));
 }
 

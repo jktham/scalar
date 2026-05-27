@@ -9,6 +9,8 @@ pub struct BuildMenu;
 pub fn build_menu_interact(
     interaction_query: Query<(&Interaction, &mut BackgroundColor), Changed<Interaction>>,
     build_buttons: Query<(&Interaction, &BuildButton)>,
+    exit_button: Single<&Interaction, With<ExitButton>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
     mut held_building: ResMut<HeldBuilding>,
 ) {
@@ -32,10 +34,21 @@ pub fn build_menu_interact(
             next_state.set(GameState::Play);
         }
     }
+
+    if *exit_button == &Interaction::Pressed
+        || keyboard_input.just_pressed(KeyCode::KeyQ)
+        || keyboard_input.just_pressed(KeyCode::Escape)
+    {
+        held_building.0 = None;
+        next_state.set(GameState::Play);
+    }
 }
 
 #[derive(Component, Clone)]
 pub struct BuildButton(pub Building);
+
+#[derive(Component)]
+pub struct ExitButton;
 
 pub fn show_build_menu(mut commands: Commands) {
     let building_buttons = Building::iter()
@@ -128,11 +141,36 @@ pub fn show_build_menu(mut commands: Commands) {
         },))
         .id();
 
+    let exit_button = commands
+        .spawn((
+            ExitButton,
+            Button,
+            Node {
+                width: px(180),
+                height: px(60),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                margin: UiRect::all(px(0)).with_top(auto()),
+                ..default()
+            },
+            BackgroundColor(Color::BLACK),
+            children![(
+                Text::new("[Q] Quit"),
+                TextFont {
+                    font_size: 16.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+            )],
+        ))
+        .id();
+
     commands.get_entity(menu).unwrap().add_child(building_list);
     commands
         .get_entity(building_list)
         .unwrap()
         .add_children(building_buttons.as_slice());
+    commands.get_entity(menu).unwrap().add_child(exit_button);
 }
 
 pub fn hide_build_menu(mut commands: Commands, menu_entities: Query<Entity, With<BuildMenu>>) {
