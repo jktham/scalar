@@ -113,46 +113,66 @@ fn main() {
                     player::update_movement.in_set(TnuaUserControlsSystems),
                     player::update_hover_target,
                     player::update_hover_action,
-                    (
-                        player::update_interact,
-                        player::place_held_building,
-                        world::update_world,
-                    )
-                        .chain(),
-                    hud::draw_inventory,
-                    buildings::update_building_animations,
-                    buildings::update_building_effects,
+                    player::update_interact,
+                    player::place_held_building,
                 )
                     .run_if(in_state(GameState::Play)),
+                player::update_movement_noinput.run_if(not(in_state(GameState::Play))),
+                hud::draw_inventory,
+                buildings::update_building_animations,
+                buildings::update_building_effects,
+                world::update_world,
                 (pause_menu::pause_menu_interact).run_if(in_state(GameState::PauseMenu)),
                 (build_menu::build_menu_interact).run_if(in_state(GameState::BuildMenu)),
-                (building_menu::building_menu_interact).run_if(in_state(GameState::BuildingMenu)),
+                (
+                    building_menu::building_menu_interact,
+                    building_menu::building_menu_update,
+                )
+                    .run_if(in_state(GameState::BuildingMenu)),
             ),
         )
         .add_systems(FixedUpdate, buildings::update_buildings)
         .add_systems(
             OnEnter(GameState::PauseMenu),
-            (pause_time, cursor_ungrab, pause_menu::show_pause_menu),
+            (
+                pause_time,
+                cursor_ungrab,
+                pause_menu::show_pause_menu,
+                hud::hide_hud,
+            ),
         )
         .add_systems(
             OnExit(GameState::PauseMenu),
-            (unpause_time, cursor_grab, pause_menu::hide_pause_menu),
+            (
+                unpause_time,
+                cursor_grab,
+                pause_menu::hide_pause_menu,
+                hud::show_hud,
+            ),
         )
         .add_systems(
             OnEnter(GameState::BuildMenu),
-            (pause_time, cursor_ungrab, build_menu::show_build_menu),
+            (cursor_ungrab, build_menu::show_build_menu, hud::hide_hud),
         )
         .add_systems(
             OnExit(GameState::BuildMenu),
-            (unpause_time, cursor_grab, build_menu::hide_build_menu),
+            (cursor_grab, build_menu::hide_build_menu, hud::show_hud),
         )
         .add_systems(
             OnEnter(GameState::BuildingMenu),
-            (pause_time, cursor_ungrab, building_menu::show_building_menu),
+            (
+                cursor_ungrab,
+                building_menu::show_building_menu,
+                hud::hide_hud,
+            ),
         )
         .add_systems(
             OnExit(GameState::BuildingMenu),
-            (unpause_time, cursor_grab, building_menu::hide_building_menu),
+            (
+                cursor_grab,
+                building_menu::hide_building_menu,
+                hud::show_hud,
+            ),
         )
         .run();
 }

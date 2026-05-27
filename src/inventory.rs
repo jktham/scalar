@@ -6,6 +6,7 @@ pub enum Item {
     Copper,
     Wood,
     Stone,
+    Coal,
 }
 
 #[derive(Component, Debug, Hash, PartialEq, Eq, Clone)]
@@ -36,10 +37,28 @@ impl Inventory {
         } else {
             self.stacks.push(ItemStack { item: *item, count });
         }
+        self.stacks.retain(|s| s.count > 0);
     }
 
     pub fn add(&mut self, item: &Item, count: i32) {
+        if count == 0 {
+            return;
+        }
         let current = self.get(item);
         self.set(item, current + count);
+    }
+
+    pub fn has(&mut self, item: &Item, count: i32) -> bool {
+        let current = self.get(item);
+        current >= count
+    }
+
+    pub fn remove(&mut self, item: &Item, count: i32) {
+        if !self.has(item, count) {
+            warn!("invalid inventory remove!");
+            return;
+        }
+        let current = self.get(item);
+        self.set(item, current - count);
     }
 }

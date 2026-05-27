@@ -2,8 +2,8 @@ use bevy::prelude::*;
 
 use crate::{
     GameState::{self},
-    buildings::{Building, Processing},
-    inventory::{Inventory, ItemStack},
+    buildings::{Building, FuelSlot, OutputSlot, Processing},
+    inventory::Inventory,
     player::{OpenBuilding, Player},
 };
 
@@ -12,11 +12,18 @@ pub struct BuildingMenu;
 
 pub fn building_menu_interact(
     collect_button: Option<Single<&Interaction, With<CollectButton>>>,
+    add_fuel_button: Option<Single<&Interaction, With<AddFuelButton>>>,
     exit_button: Single<&Interaction, With<ExitButton>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
     interaction_query: Query<(&Interaction, &mut BackgroundColor), Changed<Interaction>>,
-    mut buildings: Query<(&Building, Option<&Processing>, Option<&mut ItemStack>)>,
+    mut buildings: Query<(
+        &Building,
+        Option<&Processing>,
+        Option<&mut OutputSlot>,
+        Option<&mut FuelSlot>,
+    )>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
+    mouse_input: Res<ButtonInput<MouseButton>>,
     mut open_building: ResMut<OpenBuilding>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
@@ -38,12 +45,25 @@ pub fn building_menu_interact(
         && *collect_button == &Interaction::Pressed
     {
         if let Some(open) = open_building.0
-            && let Ok((_building, _processing, Some(mut stack))) = buildings.get_mut(open)
+            && let Ok((_, _, Some(mut output_slot), _)) = buildings.get_mut(open)
         {
-            inventory.add(&stack.item, stack.count);
-            stack.count = 0;
-            open_building.0 = None;
-            next_state.set(GameState::Play);
+            inventory.add(&output_slot.0.item, output_slot.0.count);
+            output_slot.0.count = 0;
+        }
+    }
+
+    if let Some(add_fuel_button) = add_fuel_button
+        && *add_fuel_button == &Interaction::Pressed
+        && mouse_input.just_pressed(MouseButton::Left)
+    // only once
+    {
+        if let Some(open) = open_building.0
+            && let Ok((_, _, _, Some(mut fuel_slot))) = buildings.get_mut(open)
+        {
+            if inventory.has(&fuel_slot.0.item, 1) {
+                inventory.remove(&fuel_slot.0.item, 1);
+                fuel_slot.0.count += 1;
+            }
         }
     }
 
@@ -56,15 +76,72 @@ pub fn building_menu_interact(
     }
 }
 
+pub fn get_info_text(
+    processing: &Processing,
+    output_slot: &OutputSlot,
+    fuel_slot: &FuelSlot,
+) -> String {
+    format!(
+        "{:?}\nspeed: {}\nprogress: {}%\ncost: {}\nenergy: {}\noutput: ({:?} {})\nfuel: ({:?}, {})",
+        processing.status,
+        processing.speed,
+        (processing.progress * 100.0).round(),
+        processing.cost,
+        processing.energy.round(),
+        output_slot.0.item,
+        output_slot.0.count,
+        fuel_slot.0.item,
+        fuel_slot.0.count,
+    )
+}
+
+pub fn building_menu_update(
+    buildings: Query<(
+        &Building,
+        Option<&Processing>,
+        Option<&OutputSlot>,
+        Option<&FuelSlot>,
+    )>,
+    mut info_text: Single<&mut Text, With<InfoText>>,
+    open_building: Res<OpenBuilding>,
+) {
+    let mut building = None;
+    if let Some(open) = open_building.0
+        && let Ok(b) = buildings.get(open)
+    {
+        building = Some(b);
+    }
+
+    let info = match building {
+        Some((_, Some(processing), Some(output_slot), Some(fuel_slot))) => {
+            get_info_text(processing, output_slot, fuel_slot)
+        }
+        _ => String::from("No info"),
+    };
+
+    info_text.0 = info;
+}
+
 #[derive(Component)]
 pub struct CollectButton;
 
 #[derive(Component)]
+pub struct AddFuelButton;
+
+#[derive(Component)]
 pub struct ExitButton;
+
+#[derive(Component)]
+pub struct InfoText;
 
 pub fn show_building_menu(
     mut commands: Commands,
-    buildings: Query<(&Building, Option<&Processing>, Option<&ItemStack>)>,
+    buildings: Query<(
+        &Building,
+        Option<&Processing>,
+        Option<&OutputSlot>,
+        Option<&FuelSlot>,
+    )>,
     open_building: Res<OpenBuilding>,
 ) {
     let mut building = None;
@@ -75,46 +152,64 @@ pub fn show_building_menu(
     }
 
     let title = match building {
-        Some((b, _, _)) => b.name(),
+        Some((b, _, _, _)) => b.name(),
         None => "None",
     };
 
     let info = match building {
-        Some((_, Some(processing), Some(stack))) => &format!(
-            "{:?}\nspeed: {}\n({:?}, {}), {:0>2.0}%",
-            processing.status,
-            processing.speed,
-            stack.item,
-            stack.count,
-            processing.progress * 100.0
-        ),
-        _ => "None",
+        Some((_, Some(processing), Some(output_slot), Some(fuel_slot))) => {
+            get_info_text(processing, output_slot, fuel_slot)
+        }
+        _ => String::from("No info"),
     };
 
     let buttons = match building {
-        Some((Building::Miner, _, _)) => vec![(
-            CollectButton,
-            Button,
-            Node {
-                width: px(180),
-                height: px(60),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            BackgroundColor(Color::BLACK),
-            children![(
-                Text::new("Collect"),
-                TextFont {
-                    font_size: 16.0,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-            )],
-        )]
-        .into_iter()
-        .map(|c| commands.spawn(c).id())
-        .collect::<Vec<_>>(),
+        Some((Building::Miner, _, _, _)) => vec![
+            commands
+                .spawn((
+                    CollectButton,
+                    Button,
+                    Node {
+                        width: px(180),
+                        height: px(60),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::BLACK),
+                    children![(
+                        Text::new("Collect"),
+                        TextFont {
+                            font_size: 16.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    )],
+                ))
+                .id(),
+            commands
+                .spawn((
+                    AddFuelButton,
+                    Button,
+                    Node {
+                        width: px(180),
+                        height: px(60),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(Color::BLACK),
+                    children![(
+                        Text::new("Add 1 fuel"),
+                        TextFont {
+                            font_size: 16.0,
+                            ..default()
+                        },
+                        TextColor(Color::WHITE),
+                    )],
+                ))
+                .id(),
+        ],
         _ => vec![],
     };
 
@@ -139,7 +234,7 @@ pub fn show_building_menu(
         .spawn((
             Node {
                 width: px(360),
-                height: px(120),
+                // height: px(120),
                 display: Display::Flex,
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::Center,
@@ -157,6 +252,7 @@ pub fn show_building_menu(
                     TextColor(Color::WHITE),
                 ),
                 (
+                    InfoText,
                     Text::new(info),
                     TextFont {
                         font_size: 16.0,

@@ -2,6 +2,9 @@ use crate::{inventory::Inventory, player::Player};
 use bevy::prelude::*;
 
 #[derive(Component)]
+pub struct HideHud;
+
+#[derive(Component)]
 pub struct InventoryText;
 
 #[derive(Component)]
@@ -15,6 +18,7 @@ pub struct Crosshair;
 
 pub fn setup_hud(mut commands: Commands) {
     commands.spawn((
+        // HideHud,
         InventoryText,
         Text::new("Inventory"),
         TextFont {
@@ -30,6 +34,7 @@ pub fn setup_hud(mut commands: Commands) {
     ));
 
     commands.spawn((
+        HideHud,
         Crosshair,
         Text::new("+"),
         TextFont {
@@ -44,6 +49,7 @@ pub fn setup_hud(mut commands: Commands) {
     ));
 
     commands.spawn((
+        HideHud,
         TargetText,
         Text::new(""),
         TextFont {
@@ -63,6 +69,7 @@ pub fn setup_hud(mut commands: Commands) {
     ));
 
     commands.spawn((
+        HideHud,
         ActionText,
         Text::new(""),
         TextFont {
@@ -80,6 +87,18 @@ pub fn setup_hud(mut commands: Commands) {
         },
         ZIndex(-10),
     ));
+}
+
+pub fn hide_hud(mut commands: Commands, mut hud_entities: Query<Entity, With<HideHud>>) {
+    for entity in hud_entities.iter_mut() {
+        commands.entity(entity).insert(Visibility::Hidden);
+    }
+}
+
+pub fn show_hud(mut commands: Commands, mut hud_entities: Query<Entity, With<HideHud>>) {
+    for entity in hud_entities.iter_mut() {
+        commands.entity(entity).insert(Visibility::Visible);
+    }
 }
 
 pub fn draw_inventory(

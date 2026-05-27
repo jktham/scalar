@@ -37,18 +37,11 @@ impl Building {
 /// node the miner is attached to
 pub struct MiningNode(pub Entity);
 
-#[derive(Component)]
-/// animation to play when building runs
-pub struct RunningAnimation(pub Handle<AnimationGraph>, pub AnimationNodeIndex);
-
-#[derive(Component)]
-/// marker on child with particle effect spawner to activate when building runs
-pub struct RunningParticles;
-
 #[derive(Debug)]
 pub enum ProcessingStatus {
     Idle,
     Running,
+    OutOfEnergy,
 }
 
 #[derive(Component)]
@@ -59,39 +52,75 @@ pub struct Processing {
     pub speed: f32,
     /// progress of current operation, \[0, 1\]
     pub progress: f32,
+    /// energy cost per second, W
+    pub cost: f32,
+    /// energy buffer, J
+    pub energy: f32,
 }
+
+#[derive(Component)]
+pub struct OutputSlot(pub ItemStack);
+
+#[derive(Component)]
+pub struct FuelSlot(pub ItemStack);
 
 pub fn update_buildings(
     mut buildings: Query<(
         &Building,
         Option<&mut Processing>,
-        Option<&mut ItemStack>,
+        Option<&mut OutputSlot>,
+        Option<&mut FuelSlot>,
         Option<&MiningNode>,
     )>,
     mut nodes: Query<(&ResourceNode, &mut ItemStack), Without<Building>>,
     time: Res<Time>,
 ) {
-    for (building, processing, building_stack, attached_node) in buildings.iter_mut() {
+    for (building, processing, output_slot, fuel_slot, attached_node) in buildings.iter_mut() {
         match building {
             Building::Miner => {
                 if let Some(mut processing) = processing
-                    && let Some(mut building_stack) = building_stack
+                    && let Some(mut output_slot) = output_slot
+                    && let Some(mut fuel_slot) = fuel_slot
                     && let Some(attached_node) = attached_node
                 {
                     if let Some((_node, mut node_stack)) = nodes.get_mut(attached_node.0).ok()
                         && node_stack.count > 0
                     {
-                        processing.status = ProcessingStatus::Running;
-                        processing.progress += time.delta_secs() * processing.speed;
-                        if processing.progress >= 1.0 {
-                            let amount =
-                                i32::min(node_stack.count, processing.progress.floor() as i32);
-                            building_stack.count += amount;
-                            node_stack.count -= amount;
-                            processing.progress = processing.progress.fract();
+                        let delta_cost = processing.cost * time.delta_secs();
+
+                        // burn fuel
+                        if processing.energy < delta_cost && fuel_slot.0.count > 0 {
+                            fuel_slot.0.count -= 1;
+                            processing.energy += 1000.0;
+                        }
+
+                        // self fueling
+                        if processing.energy < delta_cost
+                            && fuel_slot.0.item == output_slot.0.item
+                            && output_slot.0.count > 0
+                        {
+                            output_slot.0.count -= 1;
+                            processing.energy += 1000.0;
+                        }
+
+                        if processing.energy >= delta_cost {
+                            processing.status = ProcessingStatus::Running;
+                            processing.progress += time.delta_secs() * processing.speed;
+                            processing.energy -= delta_cost;
+
+                            if processing.progress >= 1.0 {
+                                let amount =
+                                    i32::min(node_stack.count, processing.progress.floor() as i32);
+                                output_slot.0.count += amount;
+                                node_stack.count -= amount;
+                                processing.progress = processing.progress.fract();
+                            }
+                        } else {
+                            // energy empty, keep progress
+                            processing.status = ProcessingStatus::OutOfEnergy;
                         }
                     } else {
-                        // node empty
+                        // node empty, reset to clean
                         processing.status = ProcessingStatus::Idle;
                         processing.progress = 0.0;
                     }
@@ -101,6 +130,10 @@ pub fn update_buildings(
         }
     }
 }
+
+#[derive(Component)]
+/// animation to play when building runs
+pub struct RunningAnimation(pub Handle<AnimationGraph>, pub AnimationNodeIndex);
 
 pub fn update_building_animations(
     mut commands: Commands,
@@ -133,7 +166,7 @@ pub fn update_building_animations(
                                 }
                             }
                         }
-                        ProcessingStatus::Idle => {
+                        _ => {
                             for child in children.iter_descendants(entity) {
                                 if let Ok(mut player) = players.get_mut(child) {
                                     player.play(running_animation.1).pause();
@@ -147,6 +180,10 @@ pub fn update_building_animations(
         }
     }
 }
+
+#[derive(Component)]
+/// marker on child with particle effect spawner to activate when building runs
+pub struct RunningParticles;
 
 pub fn update_building_effects(
     mut buildings: Query<(Entity, &Building, Option<&Processing>)>,
@@ -164,7 +201,7 @@ pub fn update_building_effects(
                             ProcessingStatus::Running => {
                                 spawner.active = true;
                             }
-                            ProcessingStatus::Idle => {
+                            _ => {
                                 spawner.active = false;
                             }
                         }

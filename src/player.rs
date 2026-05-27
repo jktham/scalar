@@ -1,9 +1,12 @@
 use crate::GameState;
+use crate::buildings::FuelSlot;
 use crate::buildings::MiningNode;
+use crate::buildings::OutputSlot;
 use crate::buildings::ProcessingStatus;
 use crate::buildings::RunningAnimation;
 use crate::buildings::RunningParticles;
 use crate::effects::EffectMap;
+use crate::inventory::Item::Coal;
 use crate::world::ResourceNode;
 use crate::world::Terrain;
 use crate::worldgen::WorldGen;
@@ -149,6 +152,21 @@ pub fn update_movement(
     camera_transform.translation = player_transform.translation + Vec3::new(0.0, 0.0, 0.0);
 }
 
+/// set movement to zero and update camera transform without adding new movement input
+pub fn update_movement_noinput(
+    mut player_controller: Single<&mut TnuaController<ControlScheme>, With<Player>>,
+    player_transform: Single<&mut Transform, With<Player>>,
+    mut camera_transform: Single<&mut Transform, (With<Camera>, Without<Player>)>,
+) {
+    player_controller.initiate_action_feeding();
+    player_controller.basis = TnuaBuiltinWalk {
+        desired_motion: Vec3::ZERO,
+        desired_forward: None,
+    };
+
+    camera_transform.translation = player_transform.translation + Vec3::new(0.0, 0.0, 0.0);
+}
+
 const RANGE: f32 = 6.0;
 /// get closest hit within range, ignoring specified entities
 fn get_closest_hit(rayhits: &RayHits, ignored: Vec<Entity>) -> Option<RayHitData> {
@@ -188,7 +206,7 @@ pub fn update_hover_target(
     player: Single<Entity, With<Player>>,
     mut target_text: Single<&mut Text, With<TargetText>>,
     nodes: Query<(&ResourceNode, &ItemStack)>,
-    buildings: Query<(&Building, Option<&Processing>, Option<&ItemStack>), (With<Building>,)>,
+    buildings: Query<(&Building, Option<&Processing>, Option<&OutputSlot>), (With<Building>,)>,
     parent_query: Query<&ChildOf>,
 ) {
     target_text.0 = String::from("");
@@ -202,17 +220,17 @@ pub fn update_hover_target(
     if let Ok((node, stack)) = nodes.get(entity) {
         // resource node
         target_text.0 = format!("{:?} ({:?}, {})", node, stack.item, stack.count);
-    } else if let Ok((building, status, stack)) = buildings.get(entity) {
+    } else if let Ok((building, status, output)) = buildings.get(entity) {
         // building
         if let Some(status) = status
-            && let Some(stack) = stack
+            && let Some(output) = output
         {
             target_text.0 = format!(
-                "{} ({:?}, {}), {:0>2.0}%",
+                "{} ({:?}, {}), {}%",
                 building.name(),
-                stack.item,
-                stack.count,
-                status.progress * 100.0
+                output.0.item,
+                output.0.count,
+                (status.progress * 100.0).round()
             );
         } else {
             target_text.0 = building.name().to_string();
@@ -247,7 +265,7 @@ pub fn update_hover_action(
         if player_status.progress == 0.0 {
             action_text.0 = "[E] Mine".to_string();
         } else {
-            action_text.0 = format!("[E] Mine, {:0>2.0}%", player_status.progress * 100.0);
+            action_text.0 = format!("[E] Mine, {}%", (player_status.progress * 100.0).round());
         }
     } else if let Ok(_building) = buildings.get(entity) {
         // building
@@ -255,8 +273,8 @@ pub fn update_hover_action(
             action_text.0 = String::from("[E] Open\n[F] Deconstruct");
         } else {
             action_text.0 = format!(
-                "[E] Open\n[F] Deconstruct, {:0>2.0}%",
-                player_status.progress * 100.0
+                "[E] Open\n[F] Deconstruct, {}%",
+                (player_status.progress * 100.0).round()
             );
         }
     }
@@ -400,12 +418,18 @@ pub fn place_held_building(
                             status: ProcessingStatus::Idle,
                             speed: 0.5,
                             progress: 0.0,
+                            cost: 100.0,
+                            energy: 0.0,
                         },
                         MiningNode(entity),
-                        ItemStack {
+                        OutputSlot(ItemStack {
                             item: stack.item,
                             count: 0,
-                        },
+                        }),
+                        FuelSlot(ItemStack {
+                            item: Coal,
+                            count: 0,
+                        }),
                         SceneRoot(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),
@@ -442,6 +466,8 @@ pub fn place_held_building(
                             status: ProcessingStatus::Idle,
                             speed: 1.0,
                             progress: 0.0,
+                            cost: 0.0,
+                            energy: 0.0,
                         },
                         SceneRoot(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),

@@ -150,7 +150,7 @@ pub fn setup_world(
 
     // resource nodes
     let mut rng = rand::rng();
-    for _ in 0..100 {
+    for _ in 0..200 {
         let mut pos = vec3(
             rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
@@ -163,23 +163,27 @@ pub fn setup_world(
         let normal_rot =
             Quat::from_axis_angle(normal.cross(Vec3::Y), -f32::acos(normal.dot(Vec3::Y)));
 
-        let stack = if rng.random::<f32>() < 0.5 {
-            ItemStack {
+        let variant = rng.random_range::<i32, _>(0..=2);
+        let stack = match variant {
+            0 => ItemStack {
                 item: Item::Iron,
                 count: rng.random_range(10..100),
-            }
-        } else {
-            ItemStack {
+            },
+            1 => ItemStack {
                 item: Item::Copper,
                 count: rng.random_range(10..100),
-            }
+            },
+            _ => ItemStack {
+                item: Item::Coal,
+                count: rng.random_range(10..100),
+            },
         };
 
         let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
-        let node = if stack.item == Item::Iron {
-            asset_server.load::<Scene>("node_iron.glb#Scene0")
-        } else {
-            asset_server.load::<Scene>("node_copper.glb#Scene0")
+        let node = match variant {
+            0 => asset_server.load::<Scene>("node_iron.glb#Scene0"),
+            1 => asset_server.load::<Scene>("node_copper.glb#Scene0"),
+            _ => asset_server.load::<Scene>("node_coal.glb#Scene0"),
         };
         commands.spawn((
             ResourceNode::Ore,
