@@ -11,7 +11,7 @@ use bevy::{
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
-use rand::Rng;
+use fastrand::Rng;
 
 #[derive(Component)]
 pub struct Terrain;
@@ -34,7 +34,7 @@ const CHUNK_SIZE_Z: f32 =
 const WORLD_SIZE_X: f32 = N_CHUNKS as f32 * CHUNK_SIZE_X;
 const WORLD_SIZE_Z: f32 = N_CHUNKS as f32 * CHUNK_SIZE_Z;
 
-pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>) -> Mesh {
+pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut Rng) -> Mesh {
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
@@ -86,11 +86,10 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>) -> Mesh {
 
             let steepness = normal.dot(Vec3::Y).powf(10.0);
 
-            let mut rng = rand::rng();
             let color = Vec4::new(
-                rng.random::<f32>() * 0.1 + (1.0 - steepness) * 0.1,
-                rng.random::<f32>() * 0.1 + steepness * 0.1 + 0.1,
-                rng.random::<f32>() * 0.05 + (1.0 - steepness) * 0.05,
+                rng.f32() * 0.1 + (1.0 - steepness) * 0.1,
+                rng.f32() * 0.1 + steepness * 0.1 + 0.1,
+                rng.f32() * 0.05 + (1.0 - steepness) * 0.05,
                 1.0,
             );
             colors.push(color);
@@ -108,7 +107,7 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>) -> Mesh {
     mesh
 }
 
-pub fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>) -> Vec<Mesh> {
+pub fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>, rng: &mut Rng) -> Vec<Mesh> {
     let mut chunks = Vec::new();
     for icx in 0..N_CHUNKS {
         for icz in 0..N_CHUNKS {
@@ -116,6 +115,7 @@ pub fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>) -> Vec<Mesh> {
                 icx as f32 * CHUNK_SIZE_X - WORLD_SIZE_X / 2.0,
                 icz as f32 * CHUNK_SIZE_Z - WORLD_SIZE_Z / 2.0,
                 worldgen,
+                rng,
             ));
         }
     }
@@ -129,8 +129,10 @@ pub fn setup_world(
     asset_server: Res<AssetServer>,
     worldgen: Res<WorldGen>,
 ) {
+    let mut rng = Rng::with_seed(67);
+
     // terrain
-    let chunk_meshes = generate_terrain_chunk_meshes(&worldgen);
+    let chunk_meshes = generate_terrain_chunk_meshes(&worldgen, &mut rng);
     for mesh in chunk_meshes {
         let terrain_mesh = meshes.add(mesh.clone());
         let terrain_material = materials.add(StandardMaterial {
@@ -149,33 +151,32 @@ pub fn setup_world(
     }
 
     // resource nodes
-    let mut rng = rand::rng();
-    for _ in 0..200 {
+    for _ in 0..100 {
         let mut pos = vec3(
-            rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
+            rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
-            rng.random::<f32>() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
+            rng.f32() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
         );
         pos.y = worldgen.get_height(pos.x, pos.z);
-        let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
+        let rot = Quat::from_rotation_y(rng.f32() * std::f32::consts::TAU);
 
         let normal = worldgen.get_normal(pos.x, pos.z);
         let normal_rot =
             Quat::from_axis_angle(normal.cross(Vec3::Y), -f32::acos(normal.dot(Vec3::Y)));
 
-        let variant = rng.random_range::<i32, _>(0..=2);
+        let variant = rng.i32(0..3);
         let stack = match variant {
             0 => ItemStack {
                 item: Item::Iron,
-                count: rng.random_range(10..100),
+                count: rng.i32(100..1000),
             },
             1 => ItemStack {
                 item: Item::Copper,
-                count: rng.random_range(10..100),
+                count: rng.i32(100..1000),
             },
             _ => ItemStack {
                 item: Item::Coal,
-                count: rng.random_range(10..100),
+                count: rng.i32(100..1000),
             },
         };
 
@@ -198,12 +199,12 @@ pub fn setup_world(
     // trees
     for _ in 0..2000 {
         let mut pos = vec3(
-            rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
+            rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
-            rng.random::<f32>() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
+            rng.f32() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
         );
         pos.y = worldgen.get_height(pos.x, pos.z);
-        let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
+        let rot = Quat::from_rotation_y(rng.f32() * std::f32::consts::TAU);
 
         let stack = ItemStack {
             item: Item::Wood,
@@ -223,14 +224,14 @@ pub fn setup_world(
     }
 
     // rocks
-    for _ in 0..1000 {
+    for _ in 0..2000 {
         let mut pos = vec3(
-            rng.random::<f32>() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
+            rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
-            rng.random::<f32>() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
+            rng.f32() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
         );
         pos.y = worldgen.get_height(pos.x, pos.z);
-        let rot = Quat::from_rotation_y(rng.random::<f32>() * std::f32::consts::TAU);
+        let rot = Quat::from_rotation_y(rng.f32() * std::f32::consts::TAU);
 
         let normal = worldgen.get_normal(pos.x, pos.z);
         let normal_rot =
@@ -242,7 +243,7 @@ pub fn setup_world(
         };
 
         let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
-        let variant = rng.random_range::<i32, _>(0..=2);
+        let variant = rng.i32(0..3);
         let rock = asset_server.load::<Scene>(format!("rock_{}.glb#Scene0", variant));
         commands.spawn((
             ResourceNode::Rock,
