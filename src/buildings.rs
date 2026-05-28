@@ -152,23 +152,21 @@ pub fn update_building_animations(
                 if let Some(processing) = processing
                     && let Some(running_animation) = running_animation
                 {
-                    match processing.status {
-                        ProcessingStatus::Running => {
-                            for child in children.iter_descendants(entity) {
-                                if let Ok(mut player) = players.get_mut(child) {
-                                    player.play(running_animation.1).repeat();
+                    for child in children.iter_descendants(entity) {
+                        if let Ok(mut player) = players.get_mut(child) {
+                            player.play(running_animation.1).repeat();
 
-                                    commands
-                                        .entity(child)
-                                        .try_insert_if_new(AnimationGraphHandle(
-                                            running_animation.0.clone(),
-                                        ));
+                            commands
+                                .entity(child)
+                                .try_insert_if_new(AnimationGraphHandle(
+                                    running_animation.0.clone(),
+                                ));
+
+                            match processing.status {
+                                ProcessingStatus::Running => {
+                                    player.play(running_animation.1).resume();
                                 }
-                            }
-                        }
-                        _ => {
-                            for child in children.iter_descendants(entity) {
-                                if let Ok(mut player) = players.get_mut(child) {
+                                _ => {
                                     player.play(running_animation.1).pause();
                                 }
                             }
