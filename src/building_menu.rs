@@ -24,7 +24,7 @@ pub fn building_menu_interact(
     )>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mouse_input: Res<ButtonInput<MouseButton>>,
-    mut open_building: ResMut<OpenBuilding>,
+    mut open_building: Single<&mut OpenBuilding, With<Player>>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     for (interaction, mut background_color) in interaction_query {
@@ -77,22 +77,32 @@ pub fn building_menu_interact(
 }
 
 pub fn get_info_text(
-    processing: &Processing,
-    output_slot: &OutputSlot,
-    fuel_slot: &FuelSlot,
+    processing: &Option<&Processing>,
+    output_slot: &Option<&OutputSlot>,
+    fuel_slot: &Option<&FuelSlot>,
 ) -> String {
-    format!(
-        "{:?}\nspeed: {}\nprogress: {}%\ncost: {}\nenergy: {}\noutput: ({:?} {})\nfuel: ({:?}, {})",
-        processing.status,
-        processing.speed,
-        (processing.progress * 100.0).round(),
-        processing.cost,
-        processing.energy.round(),
-        output_slot.0.item,
-        output_slot.0.count,
-        fuel_slot.0.item,
-        fuel_slot.0.count,
-    )
+    vec![
+        match processing {
+            Some(p) => format!(
+                "{:?}\nspeed: {:.2}\nprogress: {}%\ncost: {} W\nenergy: {} J",
+                p.status,
+                p.speed,
+                (p.progress * 100.0).round(),
+                p.cost,
+                p.energy.round()
+            ),
+            None => String::from(""),
+        },
+        match output_slot {
+            Some(o) => format!("\noutput: ({:?}, {})", o.0.item, o.0.count),
+            None => String::from(""),
+        },
+        match fuel_slot {
+            Some(f) => format!("\nfuel: ({:?}, {})", f.0.item, f.0.count),
+            None => String::from(""),
+        },
+    ]
+    .join("")
 }
 
 pub fn building_menu_update(
@@ -103,7 +113,7 @@ pub fn building_menu_update(
         Option<&FuelSlot>,
     )>,
     mut info_text: Single<&mut Text, With<InfoText>>,
-    open_building: Res<OpenBuilding>,
+    open_building: Single<&OpenBuilding, With<Player>>,
 ) {
     let mut building = None;
     if let Some(open) = open_building.0
@@ -113,8 +123,8 @@ pub fn building_menu_update(
     }
 
     let info = match building {
-        Some((_, Some(processing), Some(output_slot), Some(fuel_slot))) => {
-            get_info_text(processing, output_slot, fuel_slot)
+        Some((_, processing, output_slot, fuel_slot)) => {
+            get_info_text(&processing, &output_slot, &fuel_slot)
         }
         _ => String::from("No info"),
     };
@@ -142,7 +152,7 @@ pub fn show_building_menu(
         Option<&OutputSlot>,
         Option<&FuelSlot>,
     )>,
-    open_building: Res<OpenBuilding>,
+    open_building: Single<&OpenBuilding, With<Player>>,
 ) {
     let mut building = None;
     if let Some(open) = open_building.0
@@ -157,8 +167,8 @@ pub fn show_building_menu(
     };
 
     let info = match building {
-        Some((_, Some(processing), Some(output_slot), Some(fuel_slot))) => {
-            get_info_text(processing, output_slot, fuel_slot)
+        Some((_, processing, output_slot, fuel_slot)) => {
+            get_info_text(&processing, &output_slot, &fuel_slot)
         }
         _ => String::from("No info"),
     };

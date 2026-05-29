@@ -1,7 +1,11 @@
 use bevy::prelude::*;
 use strum::IntoEnumIterator;
 
-use crate::{GameState, buildings::Building, player::HeldBuilding};
+use crate::{
+    GameState,
+    buildings::Building,
+    player::{HeldBuilding, Player},
+};
 
 #[derive(Component)]
 pub struct BuildMenu;
@@ -12,7 +16,7 @@ pub fn build_menu_interact(
     exit_button: Single<&Interaction, With<ExitButton>>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut held_building: ResMut<HeldBuilding>,
+    mut held_building: Single<&mut HeldBuilding, With<Player>>,
 ) {
     for (interaction, mut background_color) in interaction_query {
         match *interaction {

@@ -91,8 +91,6 @@ fn main() {
             HanabiPlugin,
         ))
         .init_state::<GameState>()
-        .insert_resource(player::HeldBuilding(None))
-        .insert_resource(player::OpenBuilding(None))
         .insert_resource(worldgen::WorldGen::generate())
         .insert_resource(effects::EffectMap::default())
         .add_systems(

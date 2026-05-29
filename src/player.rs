@@ -1,10 +1,12 @@
 use crate::GameState;
 use crate::buildings::FuelSlot;
+use crate::buildings::MinerStatic;
 use crate::buildings::MiningNode;
 use crate::buildings::OutputSlot;
 use crate::buildings::ProcessingStatus;
 use crate::buildings::RunningAnimation;
 use crate::buildings::RunningParticles;
+use crate::buildings::SatelliteDishStatic;
 use crate::effects::EffectMap;
 use crate::inventory::Item::Coal;
 use crate::world::ResourceNode;
@@ -73,6 +75,8 @@ pub fn setup_player(
             progress: 0.0,
         },
         Inventory::default(),
+        HeldBuilding(None),
+        OpenBuilding(None),
         Transform::from_translation(spawn_pos),
         RigidBody::Dynamic,
         Collider::capsule(0.3, 2.0),
@@ -220,18 +224,10 @@ pub fn update_hover_target(
     if let Ok((node, stack)) = nodes.get(entity) {
         // resource node
         target_text.0 = format!("{:?} ({:?}, {})", node, stack.item, stack.count);
-    } else if let Ok((building, status, output)) = buildings.get(entity) {
+    } else if let Ok((building, processing, _output)) = buildings.get(entity) {
         // building
-        if let Some(status) = status
-            && let Some(output) = output
-        {
-            target_text.0 = format!(
-                "{} ({:?}, {}), {}%",
-                building.name(),
-                output.0.item,
-                output.0.count,
-                (status.progress * 100.0).round()
-            );
+        if let Some(processing) = processing {
+            target_text.0 = format!("{} ({:?})", building.name(), processing.status);
         } else {
             target_text.0 = building.name().to_string();
         }
@@ -242,11 +238,11 @@ pub fn update_hover_action(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
     player_status: Single<&PlayerProcessing, With<Player>>,
+    held_building: Single<&HeldBuilding, With<Player>>,
     mut action_text: Single<&mut Text, (With<ActionText>, Without<TargetText>)>,
     nodes: Query<&ResourceNode>,
     buildings: Query<&Building>,
     parent_query: Query<&ChildOf>,
-    held_building: Res<HeldBuilding>,
 ) {
     if held_building.0.is_some() {
         return; // only update action text if player is not holding a building, otherwise it should show building placement instructions
@@ -280,7 +276,7 @@ pub fn update_hover_action(
     }
 }
 
-#[derive(Resource)]
+#[derive(Component)]
 /// Building ui currently opened
 pub struct OpenBuilding(pub Option<Entity>);
 
@@ -288,14 +284,14 @@ pub fn update_interact(
     mut commands: Commands,
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
+    held_building: Single<&HeldBuilding, With<Player>>,
+    mut open_building: Single<&mut OpenBuilding, With<Player>>,
     mut player_status: Single<&mut PlayerProcessing, With<Player>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
     mut nodes: Query<(&ResourceNode, &mut ItemStack)>,
     mut buildings: Query<(&Building, Entity)>,
     parent_query: Query<&ChildOf>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    held_building: Res<HeldBuilding>,
-    mut open_building: ResMut<OpenBuilding>,
     mut next_state: ResMut<NextState<GameState>>,
     time: Res<Time>,
 ) {
@@ -346,19 +342,15 @@ pub fn update_interact(
     }
 
     // open building menu
-    if let Ok((building, entity)) = buildings.get_mut(entity)
+    if let Ok((_building, entity)) = buildings.get_mut(entity)
         && keyboard_input.just_pressed(KeyCode::KeyE)
     {
-        match building {
-            Building::Miner | Building::SatelliteDish => {
-                open_building.0 = Some(entity);
-                next_state.set(GameState::BuildingMenu);
-            }
-        }
+        open_building.0 = Some(entity);
+        next_state.set(GameState::BuildingMenu);
     }
 }
 
-#[derive(Resource)]
+#[derive(Component)]
 /// The type of building the player is currently holding and about to place, if any
 pub struct HeldBuilding(pub Option<Building>);
 
@@ -367,11 +359,11 @@ pub fn place_held_building(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     camera_transform: Single<&Transform, With<Camera>>,
     player: Single<Entity, With<Player>>,
+    mut held_building: Single<&mut HeldBuilding, With<Player>>,
     mut action_text: Single<&mut Text, With<ActionText>>,
     nodes: Query<(&ResourceNode, &Transform, &ItemStack)>,
     terrain: Query<&Terrain>,
     parent_query: Query<&ChildOf>,
-    mut held_building: ResMut<HeldBuilding>,
     asset_server: Res<AssetServer>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     worldgen: Res<WorldGen>,
@@ -414,6 +406,7 @@ pub fn place_held_building(
 
                     commands.spawn((
                         Building::Miner,
+                        MinerStatic,
                         Processing {
                             status: ProcessingStatus::Idle,
                             speed: 0.5,
@@ -462,6 +455,7 @@ pub fn place_held_building(
 
                     commands.spawn((
                         Building::SatelliteDish,
+                        SatelliteDishStatic,
                         Processing {
                             status: ProcessingStatus::Idle,
                             speed: 1.0,
