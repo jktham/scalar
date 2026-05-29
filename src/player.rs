@@ -1,9 +1,11 @@
 use crate::GameState;
 use crate::buildings::FuelSlot;
+use crate::buildings::ImageData;
 use crate::buildings::MinerStatic;
 use crate::buildings::MiningNode;
 use crate::buildings::OutputSlot;
 use crate::buildings::ProcessingStatus;
+use crate::buildings::ProcessorStatic;
 use crate::buildings::RunningAnimation;
 use crate::buildings::RunningParticles;
 use crate::buildings::SatelliteDishStatic;
@@ -401,7 +403,6 @@ pub fn place_held_building(
                             .load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
                     );
                     let graph_handle = graphs.add(graph);
-
                     let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
 
                     commands.spawn((
@@ -410,9 +411,8 @@ pub fn place_held_building(
                         Processing {
                             status: ProcessingStatus::Idle,
                             speed: 0.5,
-                            progress: 0.0,
-                            cost: 100.0,
-                            energy: 0.0,
+                            consumption: 100.0,
+                            ..default()
                         },
                         MiningNode(entity),
                         OutputSlot(ItemStack {
@@ -427,6 +427,57 @@ pub fn place_held_building(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),
                         *transform,
+                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                        RunningAnimation(graph_handle, index),
+                        children![(
+                            RunningParticles,
+                            ParticleEffect::new(smoke_handle),
+                            Transform::from_translation(Vec3::new(0.0, 3.6, 0.0))
+                        )],
+                    ));
+                    held_building.0 = None;
+                }
+            }
+        }
+        Building::Processor => {
+            // only placeable on terrain
+            if let Ok(_terrain) = terrain.get(entity) {
+                action_text.0 = format!("[E] Place {}\n[Q] Cancel", building.name());
+
+                if keyboard_input.just_pressed(KeyCode::KeyE) {
+                    let (graph, index) = AnimationGraph::from_clip(
+                        asset_server
+                            .load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
+                    );
+                    let graph_handle = graphs.add(graph);
+                    let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
+
+                    let pos =
+                        camera_transform.translation + camera_transform.forward() * hit.distance;
+                    let normal = worldgen.get_normal(pos.x, pos.z);
+                    let rot = Quat::from_axis_angle(
+                        normal.cross(Vec3::Y),
+                        -f32::acos(normal.dot(Vec3::Y)),
+                    );
+
+                    commands.spawn((
+                        Building::Processor,
+                        ProcessorStatic,
+                        Processing {
+                            status: ProcessingStatus::Idle,
+                            speed: 100.0,
+                            consumption: 1000.0,
+                            ..default()
+                        },
+                        FuelSlot(ItemStack {
+                            item: Coal,
+                            count: 0,
+                        }),
+                        ImageData(0),
+                        SceneRoot(
+                            asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
+                        ),
+                        Transform::from_translation(pos).with_rotation(rot),
                         ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
                         RunningAnimation(graph_handle, index),
                         children![(
@@ -459,9 +510,8 @@ pub fn place_held_building(
                         Processing {
                             status: ProcessingStatus::Idle,
                             speed: 1.0,
-                            progress: 0.0,
-                            cost: 0.0,
-                            energy: 0.0,
+                            consumption: 0.0,
+                            ..default()
                         },
                         SceneRoot(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),

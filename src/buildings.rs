@@ -8,6 +8,7 @@ use crate::{inventory::ItemStack, world::ResourceNode};
 /// dynamic enum for building impl
 pub enum Building {
     Miner,
+    Processor,
     SatelliteDish,
 }
 
@@ -17,12 +18,17 @@ pub struct MinerStatic;
 
 #[derive(Component)]
 /// static marker
+pub struct ProcessorStatic;
+
+#[derive(Component)]
+/// static marker
 pub struct SatelliteDishStatic;
 
 impl Building {
     pub fn name(&self) -> &str {
         match self {
             Building::Miner => "Miner",
+            Building::Processor => "Processor",
             Building::SatelliteDish => "Satellite Dish",
         }
     }
@@ -30,6 +36,7 @@ impl Building {
     pub fn asset(&self) -> &str {
         match self {
             Building::Miner => "miner.glb",
+            Building::Processor => "processor.glb",
             Building::SatelliteDish => "satellite_dish.glb",
         }
     }
@@ -37,6 +44,7 @@ impl Building {
     pub fn description(&self) -> &str {
         match self {
             Building::Miner => "Can be placed on a resource node to automatically mine it",
+            Building::Processor => "Generates image data",
             Building::SatelliteDish => "Sends images into the stars :)",
         }
     }
@@ -46,14 +54,15 @@ impl Building {
 /// node the miner is attached to
 pub struct MiningNode(pub Entity);
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum ProcessingStatus {
+    #[default]
     Idle,
     Running,
     OutOfEnergy,
 }
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct Processing {
     /// status
     pub status: ProcessingStatus,
@@ -62,7 +71,7 @@ pub struct Processing {
     /// progress of current operation, \[0, 1\]
     pub progress: f32,
     /// energy cost per second, W
-    pub cost: f32,
+    pub consumption: f32,
     /// energy buffer, J
     pub energy: f32,
 }
@@ -73,11 +82,18 @@ pub struct OutputSlot(pub ItemStack);
 #[derive(Component)]
 pub struct FuelSlot(pub ItemStack);
 
+#[derive(Component)]
+pub struct ImageData(pub i32);
+
 /// update processing state and function of each type of building
 pub fn update_buildings(
     mut miners: Query<
         (&mut Processing, &mut OutputSlot, &mut FuelSlot, &MiningNode),
         With<MinerStatic>,
+    >,
+    mut processors: Query<
+        (&mut Processing, &mut ImageData, &mut FuelSlot),
+        (With<ProcessorStatic>, Without<MinerStatic>),
     >,
     mut nodes: Query<(&ResourceNode, &mut ItemStack), Without<Building>>,
     time: Res<Time>,
@@ -86,16 +102,23 @@ pub fn update_buildings(
         if let Some((_node, mut node_stack)) = nodes.get_mut(mining_node.0).ok()
             && node_stack.count > 0
         {
-            let delta_cost = processing.cost * time.delta_secs();
+            let mut dt: f32 = time.delta_secs();
+            let mut delta_consumption = processing.consumption * dt;
+
+            // subtick delta, when there is enough energy for a single operation but not enough for an entire ticks consumption rate
+            if processing.energy < delta_consumption && processing.energy > 0.0 {
+                dt = dt * (processing.energy / delta_consumption);
+                delta_consumption = processing.consumption * dt;
+            }
 
             // burn fuel
-            if processing.energy < delta_cost && fuel_slot.0.count > 0 {
+            if processing.energy < delta_consumption && fuel_slot.0.count > 0 {
                 fuel_slot.0.count -= 1;
                 processing.energy += 1000.0;
             }
 
             // self fueling
-            if processing.energy < delta_cost
+            if processing.energy < delta_consumption
                 && fuel_slot.0.item == output_slot.0.item
                 && output_slot.0.count > 0
             {
@@ -103,16 +126,17 @@ pub fn update_buildings(
                 processing.energy += 1000.0;
             }
 
-            if processing.energy >= delta_cost {
+            // process
+            if processing.energy >= delta_consumption {
                 processing.status = ProcessingStatus::Running;
-                processing.progress += time.delta_secs() * processing.speed;
-                processing.energy -= delta_cost;
+                processing.progress += dt * processing.speed;
+                processing.energy -= delta_consumption;
 
                 if processing.progress >= 1.0 {
                     let amount = i32::min(node_stack.count, processing.progress.floor() as i32);
                     output_slot.0.count += amount;
                     node_stack.count -= amount;
-                    processing.progress = processing.progress.fract();
+                    processing.progress -= amount as f32;
                 }
             } else {
                 // energy empty, keep progress
@@ -122,6 +146,39 @@ pub fn update_buildings(
             // node empty, reset to clean
             processing.status = ProcessingStatus::Idle;
             processing.progress = 0.0;
+        }
+    }
+
+    for (mut processing, mut image_data, mut fuel_slot) in processors.iter_mut() {
+        let mut dt: f32 = time.delta_secs();
+        let mut delta_consumption = processing.consumption * dt;
+
+        // subtick delta, when there is enough energy for a single operation but not enough for an entire ticks consumption rate
+        if processing.energy < delta_consumption && processing.energy > 0.0 {
+            dt = dt * (processing.energy / delta_consumption);
+            delta_consumption = processing.consumption * dt;
+        }
+
+        // burn fuel
+        if processing.energy < delta_consumption && fuel_slot.0.count > 0 {
+            fuel_slot.0.count -= 1;
+            processing.energy += 1000.0;
+        }
+
+        // process
+        if processing.energy >= delta_consumption {
+            processing.status = ProcessingStatus::Running;
+            processing.progress += dt * processing.speed;
+            processing.energy -= delta_consumption;
+
+            if processing.progress >= 1.0 {
+                let amount = processing.progress.floor() as i32;
+                image_data.0 += amount;
+                processing.progress -= amount as f32;
+            }
+        } else {
+            // energy empty, keep progress
+            processing.status = ProcessingStatus::OutOfEnergy;
         }
     }
 }

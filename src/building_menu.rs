@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     GameState::{self},
-    buildings::{Building, FuelSlot, OutputSlot, Processing},
+    buildings::{Building, FuelSlot, ImageData, OutputSlot, Processing},
     inventory::Inventory,
     player::{OpenBuilding, Player},
 };
@@ -80,25 +80,30 @@ pub fn get_info_text(
     processing: &Option<&Processing>,
     output_slot: &Option<&OutputSlot>,
     fuel_slot: &Option<&FuelSlot>,
+    image_data: &Option<&ImageData>,
 ) -> String {
     vec![
         match processing {
             Some(p) => format!(
-                "{:?}\nspeed: {:.2}\nprogress: {}%\ncost: {} W\nenergy: {} J",
+                "{:?}\nspeed: {:.2}\nprogress: {}%\nconsumption: {} W\nenergy: {} J",
                 p.status,
                 p.speed,
                 (p.progress * 100.0).round(),
-                p.cost,
+                p.consumption,
                 p.energy.round()
             ),
+            None => String::from(""),
+        },
+        match fuel_slot {
+            Some(f) => format!("\nfuel: ({:?}, {})", f.0.item, f.0.count),
             None => String::from(""),
         },
         match output_slot {
             Some(o) => format!("\noutput: ({:?}, {})", o.0.item, o.0.count),
             None => String::from(""),
         },
-        match fuel_slot {
-            Some(f) => format!("\nfuel: ({:?}, {})", f.0.item, f.0.count),
+        match image_data {
+            Some(i) => format!("\nimage data: {} px", i.0),
             None => String::from(""),
         },
     ]
@@ -111,6 +116,7 @@ pub fn building_menu_update(
         Option<&Processing>,
         Option<&OutputSlot>,
         Option<&FuelSlot>,
+        Option<&ImageData>,
     )>,
     mut info_text: Single<&mut Text, With<InfoText>>,
     open_building: Single<&OpenBuilding, With<Player>>,
@@ -123,8 +129,8 @@ pub fn building_menu_update(
     }
 
     let info = match building {
-        Some((_, processing, output_slot, fuel_slot)) => {
-            get_info_text(&processing, &output_slot, &fuel_slot)
+        Some((_, processing, output_slot, fuel_slot, image_data)) => {
+            get_info_text(&processing, &output_slot, &fuel_slot, &image_data)
         }
         _ => String::from("No info"),
     };
@@ -151,6 +157,7 @@ pub fn show_building_menu(
         Option<&Processing>,
         Option<&OutputSlot>,
         Option<&FuelSlot>,
+        Option<&ImageData>,
     )>,
     open_building: Single<&OpenBuilding, With<Player>>,
 ) {
@@ -162,19 +169,19 @@ pub fn show_building_menu(
     }
 
     let title = match building {
-        Some((b, _, _, _)) => b.name(),
+        Some((b, _, _, _, _)) => b.name(),
         None => "None",
     };
 
     let info = match building {
-        Some((_, processing, output_slot, fuel_slot)) => {
-            get_info_text(&processing, &output_slot, &fuel_slot)
+        Some((_, processing, output_slot, fuel_slot, image_data)) => {
+            get_info_text(&processing, &output_slot, &fuel_slot, &image_data)
         }
         _ => String::from("No info"),
     };
 
-    let buttons = match building {
-        Some((Building::Miner, _, _, _)) => vec![
+    let collect_button = match building {
+        Some((_, _, Some(_output_slot), _, _)) => Some(
             commands
                 .spawn((
                     CollectButton,
@@ -197,6 +204,12 @@ pub fn show_building_menu(
                     )],
                 ))
                 .id(),
+        ),
+        _ => None,
+    };
+
+    let fuel_button = match building {
+        Some((_, _, _, Some(_fuel_slot), _)) => Some(
             commands
                 .spawn((
                     AddFuelButton,
@@ -219,8 +232,8 @@ pub fn show_building_menu(
                     )],
                 ))
                 .id(),
-        ],
-        _ => vec![],
+        ),
+        _ => None,
     };
 
     let menu = commands
@@ -299,10 +312,13 @@ pub fn show_building_menu(
         .id();
 
     commands.get_entity(menu).unwrap().add_child(header);
-    commands
-        .get_entity(menu)
-        .unwrap()
-        .add_children(buttons.as_slice());
+    commands.get_entity(menu).unwrap().add_children(
+        vec![collect_button, fuel_button]
+            .iter()
+            .filter_map(|b| *b)
+            .collect::<Vec<_>>()
+            .as_slice(),
+    );
     commands.get_entity(menu).unwrap().add_child(exit_button);
 }
 
