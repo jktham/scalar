@@ -51,10 +51,13 @@ use bevy_tnua_avian3d::TnuaAvian3dSensorShape;
 pub struct Player;
 
 #[derive(Component)]
-pub struct PlayerProcessing {
+pub struct PlayerMining {
     pub speed: f32,
     pub progress: f32,
 }
+
+#[derive(Component)]
+pub struct Money(pub i32);
 
 #[derive(TnuaScheme)]
 #[scheme(basis = TnuaBuiltinWalk)]
@@ -72,13 +75,19 @@ pub fn setup_player(
 
     commands.spawn((
         Player,
-        PlayerProcessing {
+        PlayerMining {
             speed: 0.25,
             progress: 0.0,
         },
-        Inventory::default(),
+        Inventory {
+            stacks: vec![ItemStack {
+                item: Coal,
+                count: 99,
+            }],
+        },
         HeldBuilding(None),
         OpenBuilding(None),
+        Money(0),
         Transform::from_translation(spawn_pos),
         RigidBody::Dynamic,
         Collider::capsule(0.3, 2.0),
@@ -239,7 +248,7 @@ pub fn update_hover_target(
 pub fn update_hover_action(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
-    player_status: Single<&PlayerProcessing, With<Player>>,
+    player_status: Single<&PlayerMining, With<Player>>,
     held_building: Single<&HeldBuilding, With<Player>>,
     mut action_text: Single<&mut Text, (With<ActionText>, Without<TargetText>)>,
     nodes: Query<&ResourceNode>,
@@ -288,7 +297,7 @@ pub fn update_interact(
     player: Single<Entity, With<Player>>,
     held_building: Single<&HeldBuilding, With<Player>>,
     mut open_building: Single<&mut OpenBuilding, With<Player>>,
-    mut player_status: Single<&mut PlayerProcessing, With<Player>>,
+    mut player_status: Single<&mut PlayerMining, With<Player>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
     mut nodes: Query<(&ResourceNode, &mut ItemStack)>,
     mut buildings: Query<(&Building, Entity)>,
@@ -496,6 +505,13 @@ pub fn place_held_building(
                 action_text.0 = format!("[E] Place {}\n[Q] Cancel", building.name());
 
                 if keyboard_input.just_pressed(KeyCode::KeyE) {
+                    let (graph, index) = AnimationGraph::from_clip(
+                        asset_server
+                            .load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
+                    );
+                    let graph_handle = graphs.add(graph);
+                    let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
+
                     let pos =
                         camera_transform.translation + camera_transform.forward() * hit.distance;
                     let normal = worldgen.get_normal(pos.x, pos.z);
@@ -509,15 +525,25 @@ pub fn place_held_building(
                         SatelliteDishStatic,
                         Processing {
                             status: ProcessingStatus::Idle,
-                            speed: 1.0,
-                            consumption: 0.0,
+                            speed: 100.0,
+                            consumption: 100.0,
                             ..default()
                         },
+                        FuelSlot(ItemStack {
+                            item: Coal,
+                            count: 0,
+                        }),
                         SceneRoot(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),
                         Transform::from_translation(pos).with_rotation(rot),
                         ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                        RunningAnimation(graph_handle, index),
+                        children![(
+                            RunningParticles,
+                            ParticleEffect::new(smoke_handle),
+                            Transform::from_translation(Vec3::new(0.0, 3.0, 0.0))
+                        )],
                     ));
                     held_building.0 = None;
                 }

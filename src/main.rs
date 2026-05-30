@@ -116,7 +116,8 @@ fn main() {
                 )
                     .run_if(in_state(GameState::Play)),
                 player::update_movement_noinput.run_if(not(in_state(GameState::Play))),
-                hud::draw_inventory,
+                hud::update_inventory,
+                hud::update_money,
                 buildings::update_building_animations,
                 buildings::update_building_effects,
                 world::update_world,

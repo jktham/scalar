@@ -1,8 +1,13 @@
 use bevy::prelude::*;
 use bevy_hanabi::EffectSpawner;
+use fastrand::Rng;
 use strum_macros::EnumIter;
 
-use crate::{inventory::ItemStack, world::ResourceNode};
+use crate::{
+    inventory::ItemStack,
+    player::{Money, Player},
+    world::ResourceNode,
+};
 
 #[derive(Component, Copy, Clone, EnumIter, Debug)]
 /// dynamic enum for building impl
@@ -91,11 +96,20 @@ pub fn update_buildings(
         (&mut Processing, &mut OutputSlot, &mut FuelSlot, &MiningNode),
         With<MinerStatic>,
     >,
+    mut nodes: Query<(&ResourceNode, &mut ItemStack), Without<Building>>,
     mut processors: Query<
         (&mut Processing, &mut ImageData, &mut FuelSlot),
         (With<ProcessorStatic>, Without<MinerStatic>),
     >,
-    mut nodes: Query<(&ResourceNode, &mut ItemStack), Without<Building>>,
+    mut satellite_dishes: Query<
+        (&mut Processing, &mut FuelSlot),
+        (
+            With<SatelliteDishStatic>,
+            Without<ProcessorStatic>,
+            Without<MinerStatic>,
+        ),
+    >,
+    mut money: Single<&mut Money, With<Player>>,
     time: Res<Time>,
 ) {
     for (mut processing, mut output_slot, mut fuel_slot, mining_node) in miners.iter_mut() {
@@ -175,6 +189,65 @@ pub fn update_buildings(
                 let amount = processing.progress.floor() as i32;
                 image_data.0 += amount;
                 processing.progress -= amount as f32;
+            }
+        } else {
+            // energy empty, keep progress
+            processing.status = ProcessingStatus::OutOfEnergy;
+        }
+    }
+
+    for (mut processing, mut fuel_slot) in satellite_dishes.iter_mut() {
+        let mut dt: f32 = time.delta_secs();
+        let mut delta_consumption = processing.consumption * dt;
+
+        let total_data = processors.iter().fold(0, |acc, p| acc + p.1.0);
+        let mut data_sources = processors
+            .iter_mut()
+            .map(|p| p.1)
+            .filter(|i| i.0 > 0)
+            .collect::<Vec<_>>();
+
+        if total_data <= 0 || data_sources.len() == 0 {
+            processing.status = ProcessingStatus::Idle;
+            return;
+        }
+
+        // subtick delta, when there is enough energy for a single operation but not enough for an entire ticks consumption rate
+        if processing.energy < delta_consumption && processing.energy > 0.0 {
+            dt = dt * (processing.energy / delta_consumption);
+            delta_consumption = processing.consumption * dt;
+        }
+
+        // burn fuel
+        if processing.energy < delta_consumption && fuel_slot.0.count > 0 {
+            fuel_slot.0.count -= 1;
+            processing.energy += 1000.0;
+        }
+
+        // process
+        if processing.energy >= delta_consumption {
+            processing.status = ProcessingStatus::Running;
+            processing.progress += dt * processing.speed;
+            processing.energy -= delta_consumption;
+
+            if processing.progress >= 1.0 {
+                let amount = i32::min(total_data, processing.progress.floor() as i32);
+                money.0 += amount;
+                processing.progress -= amount as f32;
+
+                // subtract data from available sources, picking randomly each time
+                let mut rng = Rng::default();
+                let mut remaining = amount;
+
+                while remaining > 0 {
+                    let random_index = rng.usize(0..data_sources.len());
+                    if data_sources[random_index].0 <= 0 {
+                        continue;
+                    }
+
+                    data_sources[random_index].0 -= 1;
+                    remaining -= 1;
+                }
             }
         } else {
             // energy empty, keep progress
