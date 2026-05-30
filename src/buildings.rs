@@ -4,7 +4,7 @@ use fastrand::Rng;
 use strum_macros::EnumIter;
 
 use crate::{
-    inventory::ItemStack,
+    inventory::{Item, ItemStack},
     player::{Money, Player},
     world::ResourceNode,
 };
@@ -48,9 +48,54 @@ impl Building {
 
     pub fn description(&self) -> &str {
         match self {
-            Building::Miner => "Can be placed on a resource node to automatically mine it",
-            Building::Processor => "Generates image data",
-            Building::SatelliteDish => "Sends images into the stars :)",
+            Building::Miner => {
+                "Mines resources from an ore vein. Self fueling when placed on coal."
+            }
+            Building::Processor => "Generates image data. Powered by clean coal.",
+            Building::SatelliteDish => "Sends images into the stars :). You get money in exchange.",
+        }
+    }
+
+    pub fn cost(&self) -> Vec<ItemStack> {
+        match self {
+            Building::Miner => vec![
+                ItemStack {
+                    item: Item::Stone,
+                    count: 1,
+                },
+                ItemStack {
+                    item: Item::Wood,
+                    count: 5,
+                },
+                ItemStack {
+                    item: Item::Iron,
+                    count: 10,
+                },
+            ],
+            Building::Processor => vec![
+                ItemStack {
+                    item: Item::Iron,
+                    count: 10,
+                },
+                ItemStack {
+                    item: Item::Copper,
+                    count: 10,
+                },
+            ],
+            Building::SatelliteDish => vec![
+                ItemStack {
+                    item: Item::Wood,
+                    count: 10,
+                },
+                ItemStack {
+                    item: Item::Iron,
+                    count: 20,
+                },
+                ItemStack {
+                    item: Item::Copper,
+                    count: 20,
+                },
+            ],
         }
     }
 }

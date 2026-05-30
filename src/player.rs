@@ -10,6 +10,7 @@ use crate::buildings::RunningAnimation;
 use crate::buildings::RunningParticles;
 use crate::buildings::SatelliteDishStatic;
 use crate::effects::EffectMap;
+use crate::inventory::Item;
 use crate::inventory::Item::Coal;
 use crate::world::ResourceNode;
 use crate::world::Terrain;
@@ -46,6 +47,7 @@ use bevy_tnua::{
     builtins::{TnuaBuiltinJump, TnuaBuiltinJumpConfig, TnuaBuiltinWalk, TnuaBuiltinWalkConfig},
 };
 use bevy_tnua_avian3d::TnuaAvian3dSensorShape;
+use strum::IntoEnumIterator;
 
 #[derive(Component)]
 pub struct Player;
@@ -80,10 +82,12 @@ pub fn setup_player(
             progress: 0.0,
         },
         Inventory {
-            stacks: vec![ItemStack {
-                item: Coal,
-                count: 99,
-            }],
+            stacks: Item::iter()
+                .map(|item| ItemStack {
+                    item: item,
+                    count: 100,
+                })
+                .collect(),
         },
         HeldBuilding(None),
         OpenBuilding(None),
@@ -234,7 +238,7 @@ pub fn update_hover_target(
 
     if let Ok((node, stack)) = nodes.get(entity) {
         // resource node
-        target_text.0 = format!("{:?} ({:?}, {})", node, stack.item, stack.count);
+        target_text.0 = format!("{:?} ({})", node, stack);
     } else if let Ok((building, processing, _output)) = buildings.get(entity) {
         // building
         if let Some(processing) = processing {
@@ -340,11 +344,16 @@ pub fn update_interact(
             inventory.add(&stack.item, amount);
             player_status.progress = player_status.progress.fract();
         }
-    } else if let Ok((_building, entity)) = buildings.get_mut(entity) // deconstruct building
+    } else if let Ok((building, entity)) = buildings.get_mut(entity) // deconstruct building
         && keyboard_input.pressed(KeyCode::KeyF)
     {
         player_status.progress += time.delta_secs() * player_status.speed;
         if player_status.progress >= 1.0 {
+            // refund cost
+            for stack in building.cost() {
+                inventory.add(&stack.item, stack.count);
+            }
+
             commands.entity(entity).despawn();
             player_status.progress = 0.0;
         }
@@ -370,6 +379,7 @@ pub fn place_held_building(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     camera_transform: Single<&Transform, With<Camera>>,
     player: Single<Entity, With<Player>>,
+    mut inventory: Single<&mut Inventory, With<Player>>,
     mut held_building: Single<&mut HeldBuilding, With<Player>>,
     mut action_text: Single<&mut Text, With<ActionText>>,
     nodes: Query<(&ResourceNode, &Transform, &ItemStack)>,
@@ -381,9 +391,14 @@ pub fn place_held_building(
     mut graphs: ResMut<Assets<AnimationGraph>>,
     effect_map: Res<EffectMap>,
 ) {
-    if keyboard_input.just_pressed(KeyCode::KeyQ) {
-        held_building.0 = None; // cancel building placement if Q is pressed
-        return;
+    if keyboard_input.just_pressed(KeyCode::KeyQ) && held_building.0.is_some() {
+        // refund cost
+        for stack in held_building.0.unwrap().cost() {
+            inventory.add(&stack.item, stack.count);
+        }
+
+        held_building.0 = None;
+        return; // cancel building placement if Q is pressed
     }
 
     if held_building.0.is_none() {

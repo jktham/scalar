@@ -133,10 +133,12 @@ pub fn update_inventory(
     inventory: Single<&Inventory, With<Player>>,
     mut inventory_text: Single<&mut Text, With<InventoryText>>,
 ) {
-    let mut text = String::from("Inventory\n");
-    for stack in &inventory.stacks {
-        text += &format!("{:?}: {:?}\n", stack.item, stack.count);
-    }
+    let text = inventory
+        .stacks
+        .iter()
+        .map(|stack| format!("{}", stack))
+        .collect::<Vec<_>>()
+        .join("\n");
     inventory_text.0 = text;
 }
 

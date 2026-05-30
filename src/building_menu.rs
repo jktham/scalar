@@ -95,11 +95,11 @@ pub fn get_info_text(
             None => String::from(""),
         },
         match fuel_slot {
-            Some(f) => format!("\nfuel: ({:?}, {})", f.0.item, f.0.count),
+            Some(f) => format!("\nfuel: {}", f.0),
             None => String::from(""),
         },
         match output_slot {
-            Some(o) => format!("\noutput: ({:?}, {})", o.0.item, o.0.count),
+            Some(o) => format!("\noutput: {}", o.0),
             None => String::from(""),
         },
         match image_data {

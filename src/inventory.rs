@@ -1,6 +1,9 @@
-use bevy::prelude::*;
+use core::fmt;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+use bevy::prelude::*;
+use strum_macros::EnumIter;
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, EnumIter)]
 pub enum Item {
     Iron,
     Copper,
@@ -13,6 +16,12 @@ pub enum Item {
 pub struct ItemStack {
     pub item: Item,
     pub count: i32,
+}
+
+impl fmt::Display for ItemStack {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {:?}", self.count, self.item)
+    }
 }
 
 #[derive(Component, Default, Debug)]
@@ -48,7 +57,7 @@ impl Inventory {
         self.set(item, current + count);
     }
 
-    pub fn has(&mut self, item: &Item, count: i32) -> bool {
+    pub fn has(&self, item: &Item, count: i32) -> bool {
         let current = self.get(item);
         current >= count
     }

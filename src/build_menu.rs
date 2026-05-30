@@ -4,6 +4,7 @@ use strum::IntoEnumIterator;
 use crate::{
     GameState,
     buildings::Building,
+    inventory::Inventory,
     player::{HeldBuilding, Player},
 };
 
@@ -17,6 +18,7 @@ pub fn build_menu_interact(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
     mut held_building: Single<&mut HeldBuilding, With<Player>>,
+    mut inventory: Single<&mut Inventory, With<Player>>,
 ) {
     for (interaction, mut background_color) in interaction_query {
         match *interaction {
@@ -34,6 +36,18 @@ pub fn build_menu_interact(
 
     for (interaction, build_button) in build_buttons {
         if *interaction == Interaction::Pressed {
+            let cost = build_button.0.cost();
+            if !cost.iter().fold(true, |acc, stack| {
+                acc && inventory.has(&stack.item, stack.count)
+            }) {
+                // cant afford
+                continue;
+            }
+
+            for stack in cost {
+                inventory.remove(&stack.item, stack.count);
+            }
+
             held_building.0 = Some(build_button.0);
             next_state.set(GameState::Play);
         }
@@ -54,7 +68,7 @@ pub struct BuildButton(pub Building);
 #[derive(Component)]
 pub struct ExitButton;
 
-pub fn show_build_menu(mut commands: Commands) {
+pub fn show_build_menu(mut commands: Commands, inventory: Single<&Inventory, With<Player>>) {
     let building_buttons = Building::iter()
         .map(|building| {
             (
@@ -68,12 +82,13 @@ pub fn show_build_menu(mut commands: Commands) {
                     display: Display::Flex,
                     flex_direction: FlexDirection::Column,
                     row_gap: px(10),
+                    padding: UiRect::all(px(10)),
                     ..default()
                 },
                 BackgroundColor(Color::BLACK),
                 children![
                     (
-                        Text::new(building.name().to_string()),
+                        Text::new(building.name()),
                         TextFont {
                             font_size: 16.0,
                             ..default()
@@ -82,13 +97,37 @@ pub fn show_build_menu(mut commands: Commands) {
                         TextColor(Color::srgb(1.0, 1.0, 1.0)),
                     ),
                     (
-                        Text::new(building.description().to_string()),
+                        Text::new(building.description()),
                         TextFont {
                             font_size: 12.0,
                             ..default()
                         },
                         TextLayout::new(Justify::Center, LineBreak::WordBoundary),
                         TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                    ),
+                    (
+                        Text::new(
+                            building
+                                .cost()
+                                .iter()
+                                .map(|stack| format!("{}", stack))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                        TextFont {
+                            font_size: 12.0,
+                            ..default()
+                        },
+                        TextLayout::new(Justify::Center, LineBreak::WordBoundary),
+                        TextColor(
+                            if building.cost().iter().fold(true, |acc, stack| acc
+                                && inventory.has(&stack.item, stack.count))
+                            {
+                                Color::srgb(0.6, 0.9, 0.6)
+                            } else {
+                                Color::srgb(0.9, 0.6, 0.6)
+                            }
+                        ),
                     )
                 ],
             )

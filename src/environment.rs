@@ -48,6 +48,10 @@ pub fn setup_environment(
     // camera (here for fog config :p)
     commands.spawn((
         Camera3d::default(),
+        Projection::from(PerspectiveProjection {
+            fov: 80.0_f32.to_radians(),
+            ..default()
+        }),
         // NoIndirectDrawing,
         ScreenSpaceAmbientOcclusion::default(),
         Msaa::Off,
