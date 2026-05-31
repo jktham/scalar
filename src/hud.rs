@@ -1,17 +1,21 @@
 use crate::{
+    controls::{Action, Controls},
     inventory::Inventory,
     player::{Money, Player},
 };
 use bevy::prelude::*;
 
 #[derive(Component)]
-pub struct HideHud;
+pub struct HideInMenus;
 
 #[derive(Component)]
 pub struct InventoryText;
 
 #[derive(Component)]
 pub struct MoneyText;
+
+#[derive(Component)]
+pub struct ControlsText;
 
 #[derive(Component)]
 pub struct TargetText;
@@ -22,9 +26,8 @@ pub struct ActionText;
 #[derive(Component)]
 pub struct Crosshair;
 
-pub fn setup_hud(mut commands: Commands) {
+pub fn setup_hud(mut commands: Commands, controls: Res<Controls>) {
     commands.spawn((
-        // HideHud,
         InventoryText,
         Text::new("Inventory"),
         TextFont {
@@ -45,7 +48,6 @@ pub fn setup_hud(mut commands: Commands) {
     ));
 
     commands.spawn((
-        // HideHud,
         MoneyText,
         Text::new("$0"),
         TextFont {
@@ -62,7 +64,23 @@ pub fn setup_hud(mut commands: Commands) {
     ));
 
     commands.spawn((
-        HideHud,
+        ControlsText,
+        Text::new(format!("[{}] Build", controls.print(Action::Build))),
+        TextFont {
+            font_size: 16.0,
+            ..default()
+        },
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: px(10),
+            left: px(10),
+            ..default()
+        },
+        ZIndex(-10),
+    ));
+
+    commands.spawn((
+        HideInMenus,
         Crosshair,
         Text::new("+"),
         TextFont {
@@ -77,7 +95,7 @@ pub fn setup_hud(mut commands: Commands) {
     ));
 
     commands.spawn((
-        HideHud,
+        HideInMenus,
         TargetText,
         Text::new(""),
         TextFont {
@@ -97,7 +115,7 @@ pub fn setup_hud(mut commands: Commands) {
     ));
 
     commands.spawn((
-        HideHud,
+        HideInMenus,
         ActionText,
         Text::new(""),
         TextFont {
@@ -117,13 +135,13 @@ pub fn setup_hud(mut commands: Commands) {
     ));
 }
 
-pub fn hide_hud(mut commands: Commands, mut hud_entities: Query<Entity, With<HideHud>>) {
+pub fn hide_hud(mut commands: Commands, mut hud_entities: Query<Entity, With<HideInMenus>>) {
     for entity in hud_entities.iter_mut() {
         commands.entity(entity).insert(Visibility::Hidden);
     }
 }
 
-pub fn show_hud(mut commands: Commands, mut hud_entities: Query<Entity, With<HideHud>>) {
+pub fn show_hud(mut commands: Commands, mut hud_entities: Query<Entity, With<HideInMenus>>) {
     for entity in hud_entities.iter_mut() {
         commands.entity(entity).insert(Visibility::Visible);
     }

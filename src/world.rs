@@ -1,4 +1,5 @@
 use crate::worldgen::WorldGen;
+use core::fmt;
 use std::f32::consts::PI;
 
 use crate::inventory::{Item, ItemStack};
@@ -21,6 +22,16 @@ pub enum ResourceNode {
     Ore,
     Tree,
     Rock,
+}
+
+impl fmt::Display for ResourceNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ResourceNode::Ore => write!(f, "Ore"),
+            ResourceNode::Tree => write!(f, "Tree"),
+            ResourceNode::Rock => write!(f, "Rock"),
+        }
+    }
 }
 
 const N_CHUNKS: i32 = 19;

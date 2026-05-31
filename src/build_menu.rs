@@ -4,6 +4,7 @@ use strum::IntoEnumIterator;
 use crate::{
     GameState,
     buildings::Building,
+    controls::{Action, Controls},
     inventory::Inventory,
     player::{HeldBuilding, Player},
 };
@@ -19,6 +20,7 @@ pub fn build_menu_interact(
     mut next_state: ResMut<NextState<GameState>>,
     mut held_building: Single<&mut HeldBuilding, With<Player>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
+    controls: Res<Controls>,
 ) {
     for (interaction, mut background_color) in interaction_query {
         match *interaction {
@@ -54,8 +56,8 @@ pub fn build_menu_interact(
     }
 
     if *exit_button == &Interaction::Pressed
-        || keyboard_input.just_pressed(KeyCode::KeyQ)
-        || keyboard_input.just_pressed(KeyCode::Escape)
+        || keyboard_input.just_pressed(controls.get(Action::Cancel))
+        || keyboard_input.just_pressed(controls.get(Action::Pause))
     {
         held_building.0 = None;
         next_state.set(GameState::Play);
@@ -68,7 +70,11 @@ pub struct BuildButton(pub Building);
 #[derive(Component)]
 pub struct ExitButton;
 
-pub fn show_build_menu(mut commands: Commands, inventory: Single<&Inventory, With<Player>>) {
+pub fn show_build_menu(
+    mut commands: Commands,
+    inventory: Single<&Inventory, With<Player>>,
+    controls: Res<Controls>,
+) {
     let building_buttons = Building::iter()
         .map(|building| {
             (
@@ -198,7 +204,7 @@ pub fn show_build_menu(mut commands: Commands, inventory: Single<&Inventory, Wit
             },
             BackgroundColor(Color::BLACK),
             children![(
-                Text::new("[Q] Quit"),
+                Text::new(format!("[{}] Cancel", controls.print(Action::Cancel),)),
                 TextFont {
                     font_size: 16.0,
                     ..default()

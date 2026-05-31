@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::{
     GameState::{self},
     buildings::{Building, FuelSlot, ImageData, OutputSlot, Processing},
+    controls::{Action, Controls},
     inventory::Inventory,
     player::{OpenBuilding, Player},
 };
@@ -26,6 +27,7 @@ pub fn building_menu_interact(
     mouse_input: Res<ButtonInput<MouseButton>>,
     mut open_building: Single<&mut OpenBuilding, With<Player>>,
     mut next_state: ResMut<NextState<GameState>>,
+    controls: Res<Controls>,
 ) {
     for (interaction, mut background_color) in interaction_query {
         match *interaction {
@@ -41,35 +43,40 @@ pub fn building_menu_interact(
         }
     }
 
-    if let Some(collect_button) = collect_button
-        && *collect_button == &Interaction::Pressed
-    {
-        if let Some(open) = open_building.0
-            && let Ok((_, _, Some(mut output_slot), _)) = buildings.get_mut(open)
+    if let Some(collect_button) = collect_button {
+        if *collect_button == &Interaction::Pressed
+            || keyboard_input.pressed(controls.get(Action::Primary))
         {
-            inventory.add(&output_slot.0.item, output_slot.0.count);
-            output_slot.0.count = 0;
+            if let Some(open) = open_building.0
+                && let Ok((_, _, Some(mut output_slot), _)) = buildings.get_mut(open)
+            {
+                inventory.add(&output_slot.0.item, output_slot.0.count);
+                output_slot.0.count = 0;
+            }
         }
     }
 
-    if let Some(add_fuel_button) = add_fuel_button
-        && *add_fuel_button == &Interaction::Pressed
-        && mouse_input.just_pressed(MouseButton::Left)
-    // only once
-    {
-        if let Some(open) = open_building.0
-            && let Ok((_, _, _, Some(mut fuel_slot))) = buildings.get_mut(open)
+    if let Some(add_fuel_button) = add_fuel_button {
+        // only once
+        if *add_fuel_button == &Interaction::Pressed && mouse_input.just_pressed(MouseButton::Left)
+            || keyboard_input.just_pressed(controls.get(Action::Secondary))
         {
-            if inventory.has(&fuel_slot.0.item, 1) {
-                inventory.remove(&fuel_slot.0.item, 1);
-                fuel_slot.0.count += 1;
+            {
+                if let Some(open) = open_building.0
+                    && let Ok((_, _, _, Some(mut fuel_slot))) = buildings.get_mut(open)
+                {
+                    if inventory.has(&fuel_slot.0.item, 1) {
+                        inventory.remove(&fuel_slot.0.item, 1);
+                        fuel_slot.0.count += 1;
+                    }
+                }
             }
         }
     }
 
     if *exit_button == &Interaction::Pressed
-        || keyboard_input.just_pressed(KeyCode::KeyE)
-        || keyboard_input.just_pressed(KeyCode::Escape)
+        || keyboard_input.just_pressed(controls.get(Action::Cancel))
+        || keyboard_input.just_pressed(controls.get(Action::Pause))
     {
         open_building.0 = None;
         next_state.set(GameState::Play);
@@ -85,7 +92,7 @@ pub fn get_info_text(
     vec![
         match processing {
             Some(p) => format!(
-                "{:?}\nspeed: {:.2}\nprogress: {}%\nconsumption: {} W\nenergy: {} J",
+                "{}\nspeed: {:.2}\nprogress: {}%\nconsumption: {} W\nenergy: {} J",
                 p.status,
                 p.speed,
                 (p.progress * 100.0).round(),
@@ -160,6 +167,7 @@ pub fn show_building_menu(
         Option<&ImageData>,
     )>,
     open_building: Single<&OpenBuilding, With<Player>>,
+    controls: Res<Controls>,
 ) {
     let mut building = None;
     if let Some(open) = open_building.0
@@ -195,7 +203,7 @@ pub fn show_building_menu(
                     },
                     BackgroundColor(Color::BLACK),
                     children![(
-                        Text::new("Collect"),
+                        Text::new(format!("[{}] Collect", controls.print(Action::Primary))),
                         TextFont {
                             font_size: 16.0,
                             ..default()
@@ -223,7 +231,7 @@ pub fn show_building_menu(
                     },
                     BackgroundColor(Color::BLACK),
                     children![(
-                        Text::new("Add 1 fuel"),
+                        Text::new(format!("[{}] Add fuel", controls.print(Action::Secondary))),
                         TextFont {
                             font_size: 16.0,
                             ..default()
@@ -301,7 +309,7 @@ pub fn show_building_menu(
             },
             BackgroundColor(Color::BLACK),
             children![(
-                Text::new("[E] Exit"),
+                Text::new(format!("[{}] Exit", controls.print(Action::Cancel))),
                 TextFont {
                     font_size: 16.0,
                     ..default()

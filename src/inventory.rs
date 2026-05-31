@@ -12,6 +12,18 @@ pub enum Item {
     Coal,
 }
 
+impl fmt::Display for Item {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Item::Iron => write!(f, "Iron"),
+            Item::Copper => write!(f, "Copper"),
+            Item::Wood => write!(f, "Wood"),
+            Item::Stone => write!(f, "Stone"),
+            Item::Coal => write!(f, "Coal"),
+        }
+    }
+}
+
 #[derive(Component, Debug, Hash, PartialEq, Eq, Clone)]
 pub struct ItemStack {
     pub item: Item,
@@ -20,7 +32,7 @@ pub struct ItemStack {
 
 impl fmt::Display for ItemStack {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {:?}", self.count, self.item)
+        write!(f, "{} {}", self.count, self.item)
     }
 }
 

@@ -1,3 +1,5 @@
+use core::fmt;
+
 use bevy::prelude::*;
 use bevy_hanabi::EffectSpawner;
 use fastrand::Rng;
@@ -110,6 +112,16 @@ pub enum ProcessingStatus {
     Idle,
     Running,
     OutOfEnergy,
+}
+
+impl fmt::Display for ProcessingStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ProcessingStatus::Idle => write!(f, "Idle"),
+            ProcessingStatus::Running => write!(f, "Running"),
+            ProcessingStatus::OutOfEnergy => write!(f, "Out of energy"),
+        }
+    }
 }
 
 #[derive(Component, Default)]

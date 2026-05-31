@@ -1,6 +1,9 @@
 use bevy::prelude::*;
 
-use crate::GameState;
+use crate::{
+    GameState,
+    controls::{Action, Controls},
+};
 
 #[derive(Component)]
 pub struct PauseMenu;
@@ -13,6 +16,7 @@ pub fn pause_menu_interact(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
     mut writer: MessageWriter<AppExit>,
+    controls: Res<Controls>,
 ) {
     for (interaction, mut background_color) in interaction_query {
         match *interaction {
@@ -28,7 +32,9 @@ pub fn pause_menu_interact(
         }
     }
 
-    if *continue_button == &Interaction::Pressed || keyboard_input.just_pressed(KeyCode::Escape) {
+    if *continue_button == &Interaction::Pressed
+        || keyboard_input.just_pressed(controls.get(Action::Pause))
+    {
         next_state.set(GameState::Play)
     }
 

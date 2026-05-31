@@ -9,9 +9,10 @@ use crate::buildings::ProcessorStatic;
 use crate::buildings::RunningAnimation;
 use crate::buildings::RunningParticles;
 use crate::buildings::SatelliteDishStatic;
+use crate::controls::Action;
+use crate::controls::Controls;
 use crate::effects::EffectMap;
 use crate::inventory::Item;
-use crate::inventory::Item::Coal;
 use crate::world::ResourceNode;
 use crate::world::Terrain;
 use crate::worldgen::WorldGen;
@@ -52,7 +53,7 @@ use strum::IntoEnumIterator;
 #[derive(Component)]
 pub struct Player;
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct PlayerMining {
     pub speed: f32,
     pub progress: f32,
@@ -78,8 +79,8 @@ pub fn setup_player(
     commands.spawn((
         Player,
         PlayerMining {
-            speed: 0.25,
-            progress: 0.0,
+            speed: 0.5,
+            ..default()
         },
         Inventory {
             stacks: Item::iter()
@@ -105,11 +106,11 @@ pub fn setup_player(
                 air_acceleration: 60.0,
                 spring_strength: 200.0,
                 max_slope: f32::to_radians(60.0),
-                ..Default::default()
+                ..default()
             },
             jump: TnuaBuiltinJumpConfig {
                 height: 2.0,
-                ..Default::default()
+                ..default()
             },
         })),
         TnuaAvian3dSensorShape(Collider::cylinder(0.2, 0.0)),
@@ -123,6 +124,7 @@ pub fn update_movement(
     mut camera_transform: Single<&mut Transform, (With<Camera>, Without<Player>)>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
+    controls: Res<Controls>,
 ) {
     // calculate movement direction based on camera orientation and WASD input
     let left = Vec3::Y
@@ -131,22 +133,22 @@ pub fn update_movement(
     let front = left.cross(Vec3::Y).normalize(); // in plane
 
     let mut movement = Vec3::ZERO;
-    if keyboard_input.pressed(KeyCode::KeyA) {
+    if keyboard_input.pressed(controls.get(Action::Left)) {
         movement += left;
     }
-    if keyboard_input.pressed(KeyCode::KeyD) {
+    if keyboard_input.pressed(controls.get(Action::Right)) {
         movement -= left;
     }
-    if keyboard_input.pressed(KeyCode::KeyW) {
+    if keyboard_input.pressed(controls.get(Action::Forward)) {
         movement += front;
     }
-    if keyboard_input.pressed(KeyCode::KeyS) {
+    if keyboard_input.pressed(controls.get(Action::Backward)) {
         movement -= front;
     }
 
     const SPEED: f32 = 0.5;
     let mut speed = SPEED;
-    if keyboard_input.pressed(KeyCode::ShiftLeft) {
+    if keyboard_input.pressed(controls.get(Action::Sprint)) {
         speed *= 2.0;
     }
 
@@ -158,7 +160,7 @@ pub fn update_movement(
             Vec3::new(front.x, 0.0, front.z).normalize(),
         )),
     };
-    if keyboard_input.pressed(KeyCode::Space) {
+    if keyboard_input.pressed(controls.get(Action::Jump)) {
         player_controller.action(ControlScheme::Jump(Default::default()));
     }
 
@@ -238,11 +240,11 @@ pub fn update_hover_target(
 
     if let Ok((node, stack)) = nodes.get(entity) {
         // resource node
-        target_text.0 = format!("{:?} ({})", node, stack);
+        target_text.0 = format!("{} ({})", node, stack);
     } else if let Ok((building, processing, _output)) = buildings.get(entity) {
         // building
         if let Some(processing) = processing {
-            target_text.0 = format!("{} ({:?})", building.name(), processing.status);
+            target_text.0 = format!("{} ({})", building.name(), processing.status);
         } else {
             target_text.0 = building.name().to_string();
         }
@@ -258,6 +260,7 @@ pub fn update_hover_action(
     nodes: Query<&ResourceNode>,
     buildings: Query<&Building>,
     parent_query: Query<&ChildOf>,
+    controls: Res<Controls>,
 ) {
     if held_building.0.is_some() {
         return; // only update action text if player is not holding a building, otherwise it should show building placement instructions
@@ -274,17 +277,27 @@ pub fn update_hover_action(
     if let Ok(_node) = nodes.get(entity) {
         // resource node
         if player_status.progress == 0.0 {
-            action_text.0 = "[E] Mine".to_string();
+            action_text.0 = format!("[{}] Mine", controls.print(Action::Primary));
         } else {
-            action_text.0 = format!("[E] Mine, {}%", (player_status.progress * 100.0).round());
+            action_text.0 = format!(
+                "[{}] Mine, {}%",
+                controls.print(Action::Primary),
+                (player_status.progress * 100.0).round()
+            );
         }
     } else if let Ok(_building) = buildings.get(entity) {
         // building
         if player_status.progress == 0.0 {
-            action_text.0 = String::from("[E] Open\n[F] Deconstruct");
+            action_text.0 = format!(
+                "[{}] Open\n[{}] Deconstruct",
+                controls.print(Action::Primary),
+                controls.print(Action::Secondary),
+            );
         } else {
             action_text.0 = format!(
-                "[E] Open\n[F] Deconstruct, {}%",
+                "[{}] Open\n[{}] Deconstruct, {}%",
+                controls.print(Action::Primary),
+                controls.print(Action::Secondary),
                 (player_status.progress * 100.0).round()
             );
         }
@@ -309,13 +322,14 @@ pub fn update_interact(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
     time: Res<Time>,
+    controls: Res<Controls>,
 ) {
-    if keyboard_input.just_pressed(KeyCode::Escape) {
+    if keyboard_input.just_pressed(controls.get(Action::Pause)) {
         next_state.set(GameState::PauseMenu);
         return;
     }
 
-    if keyboard_input.just_pressed(KeyCode::KeyQ) && held_building.0.is_none() {
+    if keyboard_input.just_pressed(controls.get(Action::Build)) && held_building.0.is_none() {
         next_state.set(GameState::BuildMenu);
         return;
     }
@@ -332,9 +346,9 @@ pub fn update_interact(
     }
     let (_hit, entity) = closest_hit.unwrap();
 
-    // mine resource
-    if let Ok((_node, mut stack)) = nodes.get_mut(entity)
-        && keyboard_input.pressed(KeyCode::KeyE)
+    // mining progress
+    if let Ok((_node, mut stack)) = nodes.get_mut(entity) // mine node
+        && keyboard_input.pressed(controls.get(Action::Primary))
         && stack.count > 0
     {
         player_status.progress += time.delta_secs() * player_status.speed;
@@ -345,7 +359,7 @@ pub fn update_interact(
             player_status.progress = player_status.progress.fract();
         }
     } else if let Ok((building, entity)) = buildings.get_mut(entity) // deconstruct building
-        && keyboard_input.pressed(KeyCode::KeyF)
+        && keyboard_input.pressed(controls.get(Action::Secondary))
     {
         player_status.progress += time.delta_secs() * player_status.speed;
         if player_status.progress >= 1.0 {
@@ -363,7 +377,7 @@ pub fn update_interact(
 
     // open building menu
     if let Ok((_building, entity)) = buildings.get_mut(entity)
-        && keyboard_input.just_pressed(KeyCode::KeyE)
+        && keyboard_input.just_pressed(controls.get(Action::Primary))
     {
         open_building.0 = Some(entity);
         next_state.set(GameState::BuildingMenu);
@@ -390,23 +404,29 @@ pub fn place_held_building(
     worldgen: Res<WorldGen>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     effect_map: Res<EffectMap>,
+    controls: Res<Controls>,
 ) {
-    if keyboard_input.just_pressed(KeyCode::KeyQ) && held_building.0.is_some() {
+    if held_building.0.is_none() {
+        return; // not placing a building
+    }
+
+    if keyboard_input.just_pressed(controls.get(Action::Cancel)) && held_building.0.is_some() {
         // refund cost
         for stack in held_building.0.unwrap().cost() {
             inventory.add(&stack.item, stack.count);
         }
 
         held_building.0 = None;
-        return; // cancel building placement if Q is pressed
-    }
-
-    if held_building.0.is_none() {
-        return; // not placing a building
+        return; // cancel building placement
     }
     let building = held_building.0.unwrap();
 
-    action_text.0 = format!("[E] Can't place {} here\n[Q] Cancel", building.name());
+    action_text.0 = format!(
+        "[{}] Can't place {} here\n[{}] Cancel",
+        controls.print(Action::Primary),
+        building.name(),
+        controls.print(Action::Cancel),
+    );
 
     let closest_hit = get_closest_hit_entity(&camera_rayhits, vec![player.entity()], parent_query);
     if closest_hit.is_none() {
@@ -420,8 +440,13 @@ pub fn place_held_building(
             if let Ok((node, transform, stack)) = nodes.get(entity)
                 && let ResourceNode::Ore = node
             {
-                action_text.0 = format!("[E] Place {}\n[Q] Cancel", building.name());
-                if keyboard_input.just_pressed(KeyCode::KeyE) {
+                action_text.0 = format!(
+                    "[{}] Place {}\n[{}] Cancel",
+                    controls.print(Action::Primary),
+                    building.name(),
+                    controls.print(Action::Cancel),
+                );
+                if keyboard_input.just_pressed(controls.get(Action::Primary)) {
                     let (graph, index) = AnimationGraph::from_clip(
                         asset_server
                             .load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
@@ -444,7 +469,7 @@ pub fn place_held_building(
                             count: 0,
                         }),
                         FuelSlot(ItemStack {
-                            item: Coal,
+                            item: Item::Coal,
                             count: 0,
                         }),
                         SceneRoot(
@@ -466,9 +491,14 @@ pub fn place_held_building(
         Building::Processor => {
             // only placeable on terrain
             if let Ok(_terrain) = terrain.get(entity) {
-                action_text.0 = format!("[E] Place {}\n[Q] Cancel", building.name());
+                action_text.0 = format!(
+                    "[{}] Place {}\n[{}] Cancel",
+                    controls.print(Action::Primary),
+                    building.name(),
+                    controls.print(Action::Cancel),
+                );
 
-                if keyboard_input.just_pressed(KeyCode::KeyE) {
+                if keyboard_input.just_pressed(controls.get(Action::Primary)) {
                     let (graph, index) = AnimationGraph::from_clip(
                         asset_server
                             .load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
@@ -494,7 +524,7 @@ pub fn place_held_building(
                             ..default()
                         },
                         FuelSlot(ItemStack {
-                            item: Coal,
+                            item: Item::Coal,
                             count: 0,
                         }),
                         ImageData(0),
@@ -517,9 +547,14 @@ pub fn place_held_building(
         Building::SatelliteDish => {
             // only placeable on terrain
             if let Ok(_terrain) = terrain.get(entity) {
-                action_text.0 = format!("[E] Place {}\n[Q] Cancel", building.name());
+                action_text.0 = format!(
+                    "[{}] Place {}\n[{}] Cancel",
+                    controls.print(Action::Primary),
+                    building.name(),
+                    controls.print(Action::Cancel),
+                );
 
-                if keyboard_input.just_pressed(KeyCode::KeyE) {
+                if keyboard_input.just_pressed(controls.get(Action::Primary)) {
                     let (graph, index) = AnimationGraph::from_clip(
                         asset_server
                             .load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
@@ -545,7 +580,7 @@ pub fn place_held_building(
                             ..default()
                         },
                         FuelSlot(ItemStack {
-                            item: Coal,
+                            item: Item::Coal,
                             count: 0,
                         }),
                         SceneRoot(
