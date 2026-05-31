@@ -44,14 +44,14 @@ pub fn building_menu_interact(
     }
 
     if let Some(collect_button) = collect_button {
-        if *collect_button == &Interaction::Pressed
-            || keyboard_input.pressed(controls.get(Action::Primary))
+        if *collect_button == &Interaction::Pressed && mouse_input.just_pressed(MouseButton::Left)
+            || keyboard_input.just_pressed(controls.get(Action::Primary))
         {
             if let Some(open) = open_building.0
                 && let Ok((_, _, Some(mut output_slot), _)) = buildings.get_mut(open)
             {
-                inventory.add(&output_slot.0.item, output_slot.0.count);
-                output_slot.0.count = 0;
+                inventory.add(&output_slot.stack.item, output_slot.stack.count);
+                output_slot.stack.count = 0;
             }
         }
     }
@@ -64,10 +64,11 @@ pub fn building_menu_interact(
             {
                 if let Some(open) = open_building.0
                     && let Ok((_, _, _, Some(mut fuel_slot))) = buildings.get_mut(open)
+                    && fuel_slot.stack.count < fuel_slot.limit
                 {
-                    if inventory.has(&fuel_slot.0.item, 1) {
-                        inventory.remove(&fuel_slot.0.item, 1);
-                        fuel_slot.0.count += 1;
+                    if inventory.has(&fuel_slot.stack.item, 1) {
+                        inventory.remove(&fuel_slot.stack.item, 1);
+                        fuel_slot.stack.count += 1;
                     }
                 }
             }
@@ -79,7 +80,12 @@ pub fn building_menu_interact(
         || keyboard_input.just_pressed(controls.get(Action::Pause))
     {
         open_building.0 = None;
-        next_state.set(GameState::Play);
+
+        if keyboard_input.just_pressed(controls.get(Action::Pause)) {
+            next_state.set(GameState::PauseMenu);
+        } else {
+            next_state.set(GameState::Play);
+        }
     }
 }
 
@@ -102,15 +108,15 @@ pub fn get_info_text(
             None => String::from(""),
         },
         match fuel_slot {
-            Some(f) => format!("\nfuel: {}", f.0),
+            Some(f) => format!("\nfuel: {}", f.stack),
             None => String::from(""),
         },
         match output_slot {
-            Some(o) => format!("\noutput: {}", o.0),
+            Some(o) => format!("\noutput: {}", o.stack),
             None => String::from(""),
         },
         match image_data {
-            Some(i) => format!("\nimage data: {} px", i.0),
+            Some(i) => format!("\nimage data: {} px", i.count),
             None => String::from(""),
         },
     ]

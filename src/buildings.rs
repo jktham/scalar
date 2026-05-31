@@ -112,6 +112,7 @@ pub enum ProcessingStatus {
     Idle,
     Running,
     OutOfEnergy,
+    OutputFull,
 }
 
 impl fmt::Display for ProcessingStatus {
@@ -120,6 +121,7 @@ impl fmt::Display for ProcessingStatus {
             ProcessingStatus::Idle => write!(f, "Idle"),
             ProcessingStatus::Running => write!(f, "Running"),
             ProcessingStatus::OutOfEnergy => write!(f, "Out of energy"),
+            ProcessingStatus::OutputFull => write!(f, "Output full"),
         }
     }
 }
@@ -139,13 +141,22 @@ pub struct Processing {
 }
 
 #[derive(Component)]
-pub struct OutputSlot(pub ItemStack);
+pub struct OutputSlot {
+    pub stack: ItemStack,
+    pub limit: i32,
+}
 
 #[derive(Component)]
-pub struct FuelSlot(pub ItemStack);
+pub struct FuelSlot {
+    pub stack: ItemStack,
+    pub limit: i32,
+}
 
 #[derive(Component)]
-pub struct ImageData(pub i32);
+pub struct ImageData {
+    pub count: i32,
+    pub limit: i32,
+}
 
 /// update processing state and function of each type of building
 pub fn update_buildings(
@@ -169,6 +180,7 @@ pub fn update_buildings(
     mut money: Single<&mut Money, With<Player>>,
     time: Res<Time>,
 ) {
+    // miner
     for (mut processing, mut output_slot, mut fuel_slot, mining_node) in miners.iter_mut() {
         if let Some((_node, mut node_stack)) = nodes.get_mut(mining_node.0).ok()
             && node_stack.count > 0
@@ -183,43 +195,50 @@ pub fn update_buildings(
             }
 
             // burn fuel
-            if processing.energy < delta_consumption && fuel_slot.0.count > 0 {
-                fuel_slot.0.count -= 1;
+            if processing.energy < delta_consumption && fuel_slot.stack.count > 0 {
+                fuel_slot.stack.count -= 1;
                 processing.energy += 1000.0;
             }
 
             // self fueling
             if processing.energy < delta_consumption
-                && fuel_slot.0.item == output_slot.0.item
-                && output_slot.0.count > 0
+                && fuel_slot.stack.item == output_slot.stack.item
+                && output_slot.stack.count > 0
             {
-                output_slot.0.count -= 1;
+                output_slot.stack.count -= 1;
                 processing.energy += 1000.0;
             }
 
-            // process
-            if processing.energy >= delta_consumption {
-                processing.status = ProcessingStatus::Running;
-                processing.progress += dt * processing.speed;
-                processing.energy -= delta_consumption;
+            if output_slot.stack.count < output_slot.limit {
+                // process
+                if processing.energy >= delta_consumption {
+                    processing.status = ProcessingStatus::Running;
+                    processing.progress += dt * processing.speed;
+                    processing.energy -= delta_consumption;
 
-                if processing.progress >= 1.0 {
-                    let amount = i32::min(node_stack.count, processing.progress.floor() as i32);
-                    output_slot.0.count += amount;
-                    node_stack.count -= amount;
-                    processing.progress -= amount as f32;
+                    if processing.progress >= 1.0 {
+                        let amount = i32::min(node_stack.count, processing.progress.floor() as i32)
+                            .min(output_slot.limit - output_slot.stack.count);
+                        output_slot.stack.count += amount;
+                        node_stack.count -= amount;
+                        processing.progress -= amount as f32; // progress can be above 1 if we hit output limit and speed is high enough
+                    }
+                } else {
+                    // energy empty, keep progress
+                    processing.status = ProcessingStatus::OutOfEnergy;
                 }
             } else {
-                // energy empty, keep progress
-                processing.status = ProcessingStatus::OutOfEnergy;
+                // output full, keep progress
+                processing.status = ProcessingStatus::OutputFull;
             }
         } else {
-            // node empty, reset to clean
+            // node empty, reset progress
             processing.status = ProcessingStatus::Idle;
             processing.progress = 0.0;
         }
     }
 
+    // processor
     for (mut processing, mut image_data, mut fuel_slot) in processors.iter_mut() {
         let mut dt: f32 = time.delta_secs();
         let mut delta_consumption = processing.consumption * dt;
@@ -231,37 +250,46 @@ pub fn update_buildings(
         }
 
         // burn fuel
-        if processing.energy < delta_consumption && fuel_slot.0.count > 0 {
-            fuel_slot.0.count -= 1;
+        if processing.energy < delta_consumption && fuel_slot.stack.count > 0 {
+            fuel_slot.stack.count -= 1;
             processing.energy += 1000.0;
         }
 
-        // process
-        if processing.energy >= delta_consumption {
-            processing.status = ProcessingStatus::Running;
-            processing.progress += dt * processing.speed;
-            processing.energy -= delta_consumption;
+        if image_data.count < image_data.limit {
+            // process
+            if processing.energy >= delta_consumption {
+                processing.status = ProcessingStatus::Running;
+                processing.progress += dt * processing.speed;
+                processing.energy -= delta_consumption;
 
-            if processing.progress >= 1.0 {
-                let amount = processing.progress.floor() as i32;
-                image_data.0 += amount;
-                processing.progress -= amount as f32;
+                if processing.progress >= 1.0 {
+                    let amount = i32::min(
+                        processing.progress.floor() as i32,
+                        image_data.limit - image_data.count,
+                    );
+                    image_data.count += amount;
+                    processing.progress -= amount as f32;
+                }
+            } else {
+                // energy empty, keep progress
+                processing.status = ProcessingStatus::OutOfEnergy;
             }
         } else {
-            // energy empty, keep progress
-            processing.status = ProcessingStatus::OutOfEnergy;
+            // output full, keep progress
+            processing.status = ProcessingStatus::OutputFull;
         }
     }
 
+    // satellite dish
     for (mut processing, mut fuel_slot) in satellite_dishes.iter_mut() {
         let mut dt: f32 = time.delta_secs();
         let mut delta_consumption = processing.consumption * dt;
 
-        let total_data = processors.iter().fold(0, |acc, p| acc + p.1.0);
+        let total_data = processors.iter().fold(0, |acc, p| acc + p.1.count);
         let mut data_sources = processors
             .iter_mut()
             .map(|p| p.1)
-            .filter(|i| i.0 > 0)
+            .filter(|i| i.count > 0)
             .collect::<Vec<_>>();
 
         if total_data <= 0 || data_sources.len() == 0 {
@@ -276,8 +304,8 @@ pub fn update_buildings(
         }
 
         // burn fuel
-        if processing.energy < delta_consumption && fuel_slot.0.count > 0 {
-            fuel_slot.0.count -= 1;
+        if processing.energy < delta_consumption && fuel_slot.stack.count > 0 {
+            fuel_slot.stack.count -= 1;
             processing.energy += 1000.0;
         }
 
@@ -298,11 +326,11 @@ pub fn update_buildings(
 
                 while remaining > 0 {
                     let random_index = rng.usize(0..data_sources.len());
-                    if data_sources[random_index].0 <= 0 {
+                    if data_sources[random_index].count <= 0 {
                         continue;
                     }
 
-                    data_sources[random_index].0 -= 1;
+                    data_sources[random_index].count -= 1;
                     remaining -= 1;
                 }
             }

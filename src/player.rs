@@ -464,14 +464,20 @@ pub fn place_held_building(
                             ..default()
                         },
                         MiningNode(entity),
-                        OutputSlot(ItemStack {
-                            item: stack.item,
-                            count: 0,
-                        }),
-                        FuelSlot(ItemStack {
-                            item: Item::Coal,
-                            count: 0,
-                        }),
+                        OutputSlot {
+                            stack: ItemStack {
+                                item: stack.item,
+                                count: 0,
+                            },
+                            limit: 100,
+                        },
+                        FuelSlot {
+                            stack: ItemStack {
+                                item: Item::Coal,
+                                count: 0,
+                            },
+                            limit: 100,
+                        },
                         SceneRoot(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),
@@ -523,11 +529,17 @@ pub fn place_held_building(
                             consumption: 1000.0,
                             ..default()
                         },
-                        FuelSlot(ItemStack {
-                            item: Item::Coal,
+                        FuelSlot {
+                            stack: ItemStack {
+                                item: Item::Coal,
+                                count: 0,
+                            },
+                            limit: 100,
+                        },
+                        ImageData {
                             count: 0,
-                        }),
-                        ImageData(0),
+                            limit: 1000,
+                        },
                         SceneRoot(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),
@@ -579,10 +591,13 @@ pub fn place_held_building(
                             consumption: 100.0,
                             ..default()
                         },
-                        FuelSlot(ItemStack {
-                            item: Item::Coal,
-                            count: 0,
-                        }),
+                        FuelSlot {
+                            stack: ItemStack {
+                                item: Item::Coal,
+                                count: 0,
+                            },
+                            limit: 100,
+                        },
                         SceneRoot(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),

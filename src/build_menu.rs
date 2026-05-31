@@ -60,7 +60,12 @@ pub fn build_menu_interact(
         || keyboard_input.just_pressed(controls.get(Action::Pause))
     {
         held_building.0 = None;
-        next_state.set(GameState::Play);
+
+        if keyboard_input.just_pressed(controls.get(Action::Pause)) {
+            next_state.set(GameState::PauseMenu);
+        } else {
+            next_state.set(GameState::Play);
+        }
     }
 }
 
