@@ -31,3 +31,4 @@ target
 perf.*
 flamegraph.svg
 /output
+/tracy

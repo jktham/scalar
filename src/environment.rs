@@ -6,6 +6,8 @@ use bevy::{
     prelude::*,
 };
 
+use crate::world::{WORLD_SIZE_X, WORLD_SIZE_Z};
+
 pub fn setup_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -17,14 +19,14 @@ pub fn setup_environment(
 
     // skybox
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        Mesh3d(meshes.add(Cuboid::new(WORLD_SIZE_X, 1000.0, WORLD_SIZE_Z))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: sky_color,
             unlit: true,
             cull_mode: None,
             ..default()
         })),
-        Transform::from_scale(Vec3::splat(1000.0)),
+        Transform::from_scale(Vec3::splat(1.0)),
         NotShadowCaster,
     ));
 
@@ -39,7 +41,7 @@ pub fn setup_environment(
         Transform::from_translation(Vec3::new(3.0, 4.0, 2.0) * 1000.0)
             .looking_at(Vec3::ZERO, Vec3::Y),
         CascadeShadowConfigBuilder {
-            maximum_distance: 500.0,
+            maximum_distance: 400.0,
             ..default()
         }
         .build(),
@@ -63,7 +65,7 @@ pub fn setup_environment(
             color: fog_color,
             directional_light_color: sun_color,
             directional_light_exponent: 200.0,
-            falloff: FogFalloff::from_visibility_squared(500.0),
+            falloff: FogFalloff::from_visibility_squared(400.0),
         },
     ));
 }

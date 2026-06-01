@@ -1,4 +1,4 @@
-use crate::worldgen::WorldGen;
+use crate::{chunks::ChunkIndex, worldgen::WorldGen};
 use core::fmt;
 use std::f32::consts::PI;
 
@@ -34,16 +34,16 @@ impl fmt::Display for ResourceNode {
     }
 }
 
-const N_CHUNKS: i32 = 19;
-const N_TILES_X: i32 = 20; // should be even
-const N_TILES_Z: i32 = 36;
-const TILE_RADIUS: f32 = 1.0;
+pub const N_CHUNKS: i32 = 24;
+pub const N_TILES_X: i32 = 40; // should be even
+pub const N_TILES_Z: i32 = 70;
+pub const TILE_RADIUS: f32 = 1.0;
 
-const CHUNK_SIZE_X: f32 = N_TILES_X as f32 * TILE_RADIUS * 3.0 / 2.0;
-const CHUNK_SIZE_Z: f32 =
+pub const CHUNK_SIZE_X: f32 = N_TILES_X as f32 * TILE_RADIUS * 3.0 / 2.0;
+pub const CHUNK_SIZE_Z: f32 =
     N_TILES_Z as f32 * TILE_RADIUS - 1.34 * TILE_RADIUS * N_TILES_Z as f32 / 10.0;
-const WORLD_SIZE_X: f32 = N_CHUNKS as f32 * CHUNK_SIZE_X;
-const WORLD_SIZE_Z: f32 = N_CHUNKS as f32 * CHUNK_SIZE_Z;
+pub const WORLD_SIZE_X: f32 = N_CHUNKS as f32 * CHUNK_SIZE_X;
+pub const WORLD_SIZE_Z: f32 = N_CHUNKS as f32 * CHUNK_SIZE_Z;
 
 pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut Rng) -> Mesh {
     let mut mesh = Mesh::new(
@@ -55,12 +55,12 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut
     let mut normals = Vec::new();
     let mut colors = Vec::new();
 
-    let initial_offset = Vec3::new(cx, 0.0, cz);
-    let mut offset = initial_offset;
+    let global_offset = Vec3::new(cx, 0.0, cz);
+    let mut offset = Vec3::ZERO;
 
     for ix in 0..N_TILES_X {
         offset.x += 3.0 / 2.0 * TILE_RADIUS;
-        offset.z = initial_offset.z;
+        offset.z = 0.0;
 
         for iz in 0..N_TILES_Z {
             offset.z += f32::sin(2.0 / 3.0 * PI) * TILE_RADIUS;
@@ -82,9 +82,9 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut
                     * if odd { 1.0 } else { -1.0 }
                     * TILE_RADIUS;
 
-            v0.y = worldgen.get_height(v0.x, v0.z);
-            v1.y = worldgen.get_height(v1.x, v1.z);
-            v2.y = worldgen.get_height(v2.x, v2.z);
+            v0.y = worldgen.get_height(global_offset.x + v0.x, global_offset.z + v0.z);
+            v1.y = worldgen.get_height(global_offset.x + v1.x, global_offset.z + v1.z);
+            v2.y = worldgen.get_height(global_offset.x + v2.x, global_offset.z + v2.z);
 
             vertices.push(v1);
             vertices.push(v0);
@@ -118,20 +118,25 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut
     mesh
 }
 
-pub fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>, rng: &mut Rng) -> Vec<Mesh> {
+/// mesh and chunk pos
+pub fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>, rng: &mut Rng) -> Vec<(Mesh, Vec3)> {
     let mut chunks = Vec::new();
     for icx in 0..N_CHUNKS {
         for icz in 0..N_CHUNKS {
-            chunks.push(generate_chunk_mesh(
-                icx as f32 * CHUNK_SIZE_X - WORLD_SIZE_X / 2.0,
-                icz as f32 * CHUNK_SIZE_Z - WORLD_SIZE_Z / 2.0,
-                worldgen,
-                rng,
+            let cx = icx as f32 * CHUNK_SIZE_X - WORLD_SIZE_X / 2.0;
+            let cz = icz as f32 * CHUNK_SIZE_Z - WORLD_SIZE_Z / 2.0;
+            chunks.push((
+                generate_chunk_mesh(cx, cz, worldgen, rng),
+                Vec3::new(cx, 0.0, cz),
             ));
         }
     }
     chunks
 }
+
+#[derive(Component)]
+/// entities with this marker are hidden by player::update_active_entities
+pub struct HideChunk;
 
 pub fn setup_world(
     mut commands: Commands,
@@ -139,30 +144,38 @@ pub fn setup_world(
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
     worldgen: Res<WorldGen>,
+    mut chunk_index: ResMut<ChunkIndex>,
 ) {
     let mut rng = Rng::with_seed(67);
 
     // terrain
     let chunk_meshes = generate_terrain_chunk_meshes(&worldgen, &mut rng);
     for mesh in chunk_meshes {
-        let terrain_mesh = meshes.add(mesh.clone());
+        let terrain_mesh = meshes.add(mesh.0);
         let terrain_material = materials.add(StandardMaterial {
             reflectance: 0.0,
             ..default()
         });
 
-        commands.spawn((
-            Terrain,
-            Mesh3d(terrain_mesh),
-            MeshMaterial3d(terrain_material),
-            RigidBody::Static,
-            ColliderConstructor::TrimeshFromMesh,
-            Transform::from_xyz(0.0, 0.0, 0.0),
-        ));
+        let e = commands
+            .spawn((
+                Terrain,
+                Mesh3d(terrain_mesh),
+                MeshMaterial3d(terrain_material),
+                RigidBody::Static,
+                ColliderConstructor::TrimeshFromMesh,
+                Transform::from_translation(mesh.1),
+                HideChunk,
+            ))
+            .id();
+        chunk_index.add(
+            &(mesh.1 + Vec3::new(CHUNK_SIZE_X / 2.0, 0.0, CHUNK_SIZE_Z / 2.0)),
+            &e,
+        );
     }
 
     // resource nodes
-    for _ in 0..100 {
+    for _ in 0..500 {
         let mut pos = vec3(
             rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
@@ -192,23 +205,27 @@ pub fn setup_world(
         };
 
         let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
-        let node = match variant {
+        let ore_scene = match variant {
             0 => asset_server.load::<Scene>("node_iron.glb#Scene0"),
             1 => asset_server.load::<Scene>("node_copper.glb#Scene0"),
             _ => asset_server.load::<Scene>("node_coal.glb#Scene0"),
         };
-        commands.spawn((
-            ResourceNode::Ore,
-            stack,
-            SceneRoot(node.clone()),
-            transform,
-            RigidBody::Static,
-            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
-        ));
+        let e = commands
+            .spawn((
+                ResourceNode::Ore,
+                stack,
+                SceneRoot(ore_scene),
+                transform,
+                RigidBody::Static,
+                ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                HideChunk,
+            ))
+            .id();
+        chunk_index.add(&transform.translation, &e);
     }
 
     // trees
-    for _ in 0..2000 {
+    for _ in 0..20000 {
         let mut pos = vec3(
             rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
@@ -223,19 +240,23 @@ pub fn setup_world(
         };
 
         let transform = Transform::from_translation(pos).with_rotation(rot);
-        let node = asset_server.load::<Scene>("tree.glb#Scene0");
-        commands.spawn((
-            ResourceNode::Tree,
-            stack,
-            SceneRoot(node.clone()),
-            transform,
-            RigidBody::Static,
-            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
-        ));
+        let tree_scene = asset_server.load::<Scene>("tree.glb#Scene0");
+        let e = commands
+            .spawn((
+                ResourceNode::Tree,
+                stack,
+                SceneRoot(tree_scene),
+                transform,
+                RigidBody::Static,
+                ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                HideChunk,
+            ))
+            .id();
+        chunk_index.add(&transform.translation, &e);
     }
 
     // rocks
-    for _ in 0..2000 {
+    for _ in 0..4000 {
         let mut pos = vec3(
             rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
             0.0,
@@ -255,15 +276,19 @@ pub fn setup_world(
 
         let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
         let variant = rng.i32(0..3);
-        let rock = asset_server.load::<Scene>(format!("rock_{}.glb#Scene0", variant));
-        commands.spawn((
-            ResourceNode::Rock,
-            stack,
-            SceneRoot(rock),
-            transform,
-            RigidBody::Static,
-            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
-        ));
+        let rock_scene = asset_server.load::<Scene>(format!("rock_{}.glb#Scene0", variant));
+        let e = commands
+            .spawn((
+                ResourceNode::Rock,
+                stack,
+                SceneRoot(rock_scene),
+                transform,
+                RigidBody::Static,
+                ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                HideChunk,
+            ))
+            .id();
+        chunk_index.add(&transform.translation, &e);
     }
 }
 

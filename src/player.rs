@@ -9,10 +9,13 @@ use crate::buildings::ProcessorStatic;
 use crate::buildings::RunningAnimation;
 use crate::buildings::RunningParticles;
 use crate::buildings::SatelliteDishStatic;
+use crate::chunks::ChunkIndex;
+use crate::chunks::get_chunk_pos;
 use crate::controls::Action;
 use crate::controls::Controls;
 use crate::effects::EffectMap;
 use crate::inventory::Item;
+use crate::world::HideChunk;
 use crate::world::ResourceNode;
 use crate::world::Terrain;
 use crate::worldgen::WorldGen;
@@ -62,6 +65,9 @@ pub struct PlayerMining {
 #[derive(Component)]
 pub struct Money(pub i32);
 
+#[derive(Component)]
+pub struct ChunkPos(pub IVec2);
+
 #[derive(TnuaScheme)]
 #[scheme(basis = TnuaBuiltinWalk)]
 pub enum ControlScheme {
@@ -93,6 +99,7 @@ pub fn setup_player(
         HeldBuilding(None),
         OpenBuilding(None),
         Money(0),
+        ChunkPos(IVec2::MIN),
         Transform::from_translation(spawn_pos),
         RigidBody::Dynamic,
         Collider::capsule(0.3, 2.0),
@@ -186,6 +193,37 @@ pub fn update_movement_noinput(
     };
 
     camera_transform.translation = player_transform.translation + Vec3::new(0.0, 0.0, 0.0);
+}
+
+/// number of chunks to draw in a square radius around the player
+const DRAW_RADIUS: i32 = 3;
+
+pub fn update_active_entities(
+    player_transform: Single<&Transform, With<Player>>,
+    mut player_chunk_pos: Single<&mut ChunkPos, With<Player>>,
+    entities: Query<Entity, With<HideChunk>>,
+    chunk_index: Res<ChunkIndex>,
+    mut commands: Commands,
+) {
+    if get_chunk_pos(&player_transform.translation) == player_chunk_pos.0 {
+        return; // same chunk, no need to update
+    }
+    player_chunk_pos.0 = get_chunk_pos(&player_transform.translation);
+
+    let chunk_entities = chunk_index.get_radius(&player_transform.translation, DRAW_RADIUS);
+
+    let batch = entities
+        .iter()
+        .map(|e| {
+            if chunk_entities.contains(&e) {
+                (e, Visibility::Visible)
+            } else {
+                (e, Visibility::Hidden)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    commands.insert_batch(batch);
 }
 
 const RANGE: f32 = 6.0;

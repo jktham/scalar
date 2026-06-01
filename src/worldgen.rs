@@ -101,7 +101,7 @@ where
     fx0 * (1.0 - dz) + fx1 * dz
 }
 
-pub const TERRAIN_N: usize = 1000; // n*n array size
+pub const TERRAIN_N: usize = 1500; // n*n array size
 pub const TERRAIN_RESOLUTION: f32 = 1.0; // pixels per meter
 
 #[derive(Resource)]

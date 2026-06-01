@@ -4,7 +4,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions, PresentMode, WindowResolution},
 };
-use bevy_framepace::FramepacePlugin;
+// use bevy_framepace::FramepacePlugin;
 use bevy_hanabi::prelude::*;
 use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
@@ -12,6 +12,7 @@ use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 mod build_menu;
 mod building_menu;
 mod buildings;
+mod chunks;
 mod controls;
 mod effects;
 mod environment;
@@ -88,13 +89,14 @@ fn main() {
             PhysicsPlugins::default(),
             TnuaControllerPlugin::<player::ControlScheme>::new(FixedUpdate),
             TnuaAvian3dPlugin::new(FixedUpdate),
-            FramepacePlugin,
+            // FramepacePlugin,
             HanabiPlugin,
         ))
         .init_state::<GameState>()
         .insert_resource(worldgen::WorldGen::generate())
         .insert_resource(effects::EffectMap::default())
         .insert_resource(controls::Controls::default())
+        .insert_resource(chunks::ChunkIndex::default())
         .add_systems(
             Startup,
             (
@@ -111,6 +113,7 @@ fn main() {
             (
                 (
                     player::update_movement.in_set(TnuaUserControlsSystems),
+                    player::update_active_entities,
                     player::update_hover_target,
                     player::update_hover_action,
                     player::update_interact,
