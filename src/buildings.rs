@@ -348,29 +348,25 @@ pub struct RunningAnimation(pub Handle<AnimationGraph>, pub AnimationNodeIndex);
 /// play animations on any building with Processing and RunningAnimation components
 pub fn update_building_animations(
     mut commands: Commands,
-    mut buildings: Query<(Entity, Option<&Processing>, Option<&RunningAnimation>)>,
+    buildings: Query<(Entity, &Processing, &RunningAnimation)>,
     children: Query<&Children>,
     mut players: Query<&mut AnimationPlayer>,
 ) {
-    for (entity, processing, running_animation) in buildings.iter_mut() {
-        if let Some(processing) = processing
-            && let Some(running_animation) = running_animation
-        {
-            for child in children.iter_descendants(entity) {
-                if let Ok(mut player) = players.get_mut(child) {
-                    player.play(running_animation.1).repeat();
+    for (entity, processing, running_animation) in buildings.iter() {
+        for child in children.iter_descendants(entity) {
+            if let Ok(mut player) = players.get_mut(child) {
+                player.play(running_animation.1).repeat();
 
-                    commands
-                        .entity(child)
-                        .try_insert_if_new(AnimationGraphHandle(running_animation.0.clone()));
+                commands
+                    .entity(child)
+                    .try_insert_if_new(AnimationGraphHandle(running_animation.0.clone()));
 
-                    match processing.status {
-                        ProcessingStatus::Running => {
-                            player.play(running_animation.1).resume();
-                        }
-                        _ => {
-                            player.play(running_animation.1).pause();
-                        }
+                match processing.status {
+                    ProcessingStatus::Running => {
+                        player.play(running_animation.1).resume();
+                    }
+                    _ => {
+                        player.play(running_animation.1).pause();
                     }
                 }
             }
@@ -384,15 +380,13 @@ pub struct RunningParticles;
 
 /// spawn particle effects on any building with Processing and RunningParticles components
 pub fn update_building_effects(
-    mut buildings: Query<(Entity, Option<&Processing>)>,
+    buildings: Query<(Entity, &Processing)>,
     children: Query<&Children>,
     mut effect_spawners: Query<&mut EffectSpawner, With<RunningParticles>>,
 ) {
-    for (entity, processing) in buildings.iter_mut() {
+    for (entity, processing) in buildings.iter() {
         for child in children.iter_descendants(entity) {
-            if let Some(processing) = processing
-                && let Ok(mut spawner) = effect_spawners.get_mut(child)
-            {
+            if let Ok(mut spawner) = effect_spawners.get_mut(child) {
                 match processing.status {
                     ProcessingStatus::Running => {
                         spawner.active = true;
