@@ -1,10 +1,10 @@
-use crate::{chunks::ChunkIndex, worldgen::WorldGen};
+use crate::{player::GameLayer, worldgen::WorldGen};
 use core::fmt;
 use std::f32::consts::PI;
 
 use crate::inventory::{Item, ItemStack};
 use avian3d::{
-    collision::collider::{ColliderConstructor, ColliderConstructorHierarchy},
+    collision::collider::{ColliderConstructor, ColliderConstructorHierarchy, CollisionLayers},
     dynamics::rigid_body::RigidBody,
 };
 use bevy::{
@@ -136,7 +136,7 @@ pub fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>, rng: &mut Rng) ->
 
 #[derive(Component)]
 /// entities with this marker are hidden by player::update_active_entities
-pub struct HideChunk;
+pub struct CullDistance(pub f32);
 
 pub fn setup_world(
     mut commands: Commands,
@@ -144,12 +144,12 @@ pub fn setup_world(
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
     worldgen: Res<WorldGen>,
-    mut chunk_index: ResMut<ChunkIndex>,
 ) {
     let mut rng = Rng::with_seed(67);
 
     // terrain
     let chunk_meshes = generate_terrain_chunk_meshes(&worldgen, &mut rng);
+    let mut terrain_batch = Vec::new();
     for mesh in chunk_meshes {
         let terrain_mesh = meshes.add(mesh.0);
         let terrain_material = materials.add(StandardMaterial {
@@ -157,24 +157,21 @@ pub fn setup_world(
             ..default()
         });
 
-        let e = commands
-            .spawn((
-                Terrain,
-                Mesh3d(terrain_mesh),
-                MeshMaterial3d(terrain_material),
-                RigidBody::Static,
-                ColliderConstructor::TrimeshFromMesh,
-                Transform::from_translation(mesh.1),
-                HideChunk,
-            ))
-            .id();
-        chunk_index.add(
-            &(mesh.1 + Vec3::new(CHUNK_SIZE_X / 2.0, 0.0, CHUNK_SIZE_Z / 2.0)),
-            &e,
-        );
+        terrain_batch.push((
+            Terrain,
+            Mesh3d(terrain_mesh),
+            MeshMaterial3d(terrain_material),
+            RigidBody::Static,
+            ColliderConstructor::TrimeshFromMesh,
+            Transform::from_translation(mesh.1),
+            CullDistance(300.0),
+            CollisionLayers::new(GameLayer::Terrain, [GameLayer::Player]),
+        ));
     }
+    commands.spawn_batch(terrain_batch);
 
-    // resource nodes
+    // ore
+    let mut ore_batch = Vec::new();
     for _ in 0..500 {
         let mut pos = vec3(
             rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
@@ -210,21 +207,22 @@ pub fn setup_world(
             1 => asset_server.load::<Scene>("node_copper.glb#Scene0"),
             _ => asset_server.load::<Scene>("node_coal.glb#Scene0"),
         };
-        let e = commands
-            .spawn((
-                ResourceNode::Ore,
-                stack,
-                SceneRoot(ore_scene),
-                transform,
-                RigidBody::Static,
-                ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
-                HideChunk,
-            ))
-            .id();
-        chunk_index.add(&transform.translation, &e);
+
+        ore_batch.push((
+            ResourceNode::Ore,
+            stack,
+            SceneRoot(ore_scene),
+            transform,
+            RigidBody::Static,
+            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                .with_default_layers(CollisionLayers::new(GameLayer::Object, [GameLayer::Player])),
+            CullDistance(300.0),
+        ));
     }
+    commands.spawn_batch(ore_batch);
 
     // trees
+    let mut tree_batch = Vec::new();
     for _ in 0..20000 {
         let mut pos = vec3(
             rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
@@ -241,21 +239,22 @@ pub fn setup_world(
 
         let transform = Transform::from_translation(pos).with_rotation(rot);
         let tree_scene = asset_server.load::<Scene>("tree.glb#Scene0");
-        let e = commands
-            .spawn((
-                ResourceNode::Tree,
-                stack,
-                SceneRoot(tree_scene),
-                transform,
-                RigidBody::Static,
-                ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
-                HideChunk,
-            ))
-            .id();
-        chunk_index.add(&transform.translation, &e);
+
+        tree_batch.push((
+            ResourceNode::Tree,
+            stack,
+            SceneRoot(tree_scene),
+            transform,
+            RigidBody::Static,
+            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                .with_default_layers(CollisionLayers::new(GameLayer::Object, [GameLayer::Player])),
+            CullDistance(300.0),
+        ));
     }
+    commands.spawn_batch(tree_batch);
 
     // rocks
+    let mut rock_batch = Vec::new();
     for _ in 0..4000 {
         let mut pos = vec3(
             rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
@@ -277,19 +276,19 @@ pub fn setup_world(
         let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
         let variant = rng.i32(0..3);
         let rock_scene = asset_server.load::<Scene>(format!("rock_{}.glb#Scene0", variant));
-        let e = commands
-            .spawn((
-                ResourceNode::Rock,
-                stack,
-                SceneRoot(rock_scene),
-                transform,
-                RigidBody::Static,
-                ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
-                HideChunk,
-            ))
-            .id();
-        chunk_index.add(&transform.translation, &e);
+
+        rock_batch.push((
+            ResourceNode::Rock,
+            stack,
+            SceneRoot(rock_scene),
+            transform,
+            RigidBody::Static,
+            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                .with_default_layers(CollisionLayers::new(GameLayer::Object, [GameLayer::Player])),
+            CullDistance(300.0),
+        ));
     }
+    commands.spawn_batch(rock_batch);
 }
 
 pub fn update_world(
@@ -306,7 +305,13 @@ pub fn update_world(
                     commands.spawn((
                         SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
                         *transform,
-                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                        RigidBody::Static,
+                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                            .with_default_layers(CollisionLayers::new(
+                                GameLayer::Object,
+                                [GameLayer::Player],
+                            )),
+                        CullDistance(300.0),
                     ));
                 }
                 _ => {}

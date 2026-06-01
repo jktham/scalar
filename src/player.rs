@@ -9,13 +9,11 @@ use crate::buildings::ProcessorStatic;
 use crate::buildings::RunningAnimation;
 use crate::buildings::RunningParticles;
 use crate::buildings::SatelliteDishStatic;
-use crate::chunks::ChunkIndex;
-use crate::chunks::get_chunk_pos;
 use crate::controls::Action;
 use crate::controls::Controls;
 use crate::effects::EffectMap;
 use crate::inventory::Item;
-use crate::world::HideChunk;
+use crate::world::CullDistance;
 use crate::world::ResourceNode;
 use crate::world::Terrain;
 use crate::worldgen::WorldGen;
@@ -26,7 +24,9 @@ use crate::{
 };
 use avian3d::collision::collider::ColliderConstructor;
 use avian3d::collision::collider::ColliderConstructorHierarchy;
+use avian3d::collision::collider::CollisionLayers;
 use avian3d::dynamics::rigid_body::Friction;
+use avian3d::prelude::PhysicsLayer;
 use avian3d::spatial_query::RayHitData;
 use avian3d::{
     collision::collider::Collider,
@@ -65,13 +65,18 @@ pub struct PlayerMining {
 #[derive(Component)]
 pub struct Money(pub i32);
 
-#[derive(Component)]
-pub struct ChunkPos(pub IVec2);
-
 #[derive(TnuaScheme)]
 #[scheme(basis = TnuaBuiltinWalk)]
 pub enum ControlScheme {
     Jump(TnuaBuiltinJump),
+}
+
+#[derive(PhysicsLayer, Default)]
+pub enum GameLayer {
+    #[default]
+    Player,
+    Terrain,
+    Object,
 }
 
 pub fn setup_player(
@@ -99,7 +104,6 @@ pub fn setup_player(
         HeldBuilding(None),
         OpenBuilding(None),
         Money(0),
-        ChunkPos(IVec2::MIN),
         Transform::from_translation(spawn_pos),
         RigidBody::Dynamic,
         Collider::capsule(0.3, 2.0),
@@ -122,6 +126,7 @@ pub fn setup_player(
         })),
         TnuaAvian3dSensorShape(Collider::cylinder(0.2, 0.0)),
         LockedAxes::ROTATION_LOCKED,
+        CollisionLayers::new(GameLayer::Player, [GameLayer::Terrain, GameLayer::Object]),
     ));
 }
 
@@ -195,30 +200,20 @@ pub fn update_movement_noinput(
     camera_transform.translation = player_transform.translation + Vec3::new(0.0, 0.0, 0.0);
 }
 
-/// number of chunks to draw in a square radius around the player
-const DRAW_RADIUS: i32 = 3;
-
-pub fn update_active_entities(
+pub fn cull_entities(
     player_transform: Single<&Transform, With<Player>>,
-    mut player_chunk_pos: Single<&mut ChunkPos, With<Player>>,
-    entities: Query<Entity, With<HideChunk>>,
-    chunk_index: Res<ChunkIndex>,
+    entities: Query<(Entity, &Transform, &CullDistance)>,
     mut commands: Commands,
 ) {
-    if get_chunk_pos(&player_transform.translation) == player_chunk_pos.0 {
-        return; // same chunk, no need to update
-    }
-    player_chunk_pos.0 = get_chunk_pos(&player_transform.translation);
-
-    let chunk_entities = chunk_index.get_radius(&player_transform.translation, DRAW_RADIUS);
-
     let batch = entities
         .iter()
-        .map(|e| {
-            if chunk_entities.contains(&e) {
-                (e, Visibility::Visible)
+        .collect::<Vec<_>>()
+        .iter()
+        .map(|(e, transform, dist)| {
+            if player_transform.translation.distance(transform.translation) <= dist.0 {
+                (*e, Visibility::Visible)
             } else {
-                (e, Visibility::Hidden)
+                (*e, Visibility::Hidden)
             }
         })
         .collect::<Vec<_>>();
@@ -226,7 +221,7 @@ pub fn update_active_entities(
     commands.insert_batch(batch);
 }
 
-const RANGE: f32 = 6.0;
+pub const RANGE: f32 = 6.0;
 /// get closest hit within range, ignoring specified entities
 fn get_closest_hit(rayhits: &RayHits, ignored: Vec<Entity>) -> Option<RayHitData> {
     let mut closest_hit = None;
@@ -520,7 +515,11 @@ pub fn place_held_building(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),
                         *transform,
-                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                            .with_default_layers(CollisionLayers::new(
+                                GameLayer::Object,
+                                [GameLayer::Player],
+                            )),
                         RunningAnimation(graph_handle, index),
                         children![(
                             RunningParticles,
@@ -582,7 +581,11 @@ pub fn place_held_building(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),
                         Transform::from_translation(pos).with_rotation(rot),
-                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                            .with_default_layers(CollisionLayers::new(
+                                GameLayer::Object,
+                                [GameLayer::Player],
+                            )),
                         RunningAnimation(graph_handle, index),
                         children![(
                             RunningParticles,
@@ -640,7 +643,11 @@ pub fn place_held_building(
                             asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
                         ),
                         Transform::from_translation(pos).with_rotation(rot),
-                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh),
+                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                            .with_default_layers(CollisionLayers::new(
+                                GameLayer::Object,
+                                [GameLayer::Player],
+                            )),
                         RunningAnimation(graph_handle, index),
                         children![(
                             RunningParticles,

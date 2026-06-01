@@ -1,7 +1,10 @@
+use std::time::Duration;
+
 use avian3d::prelude::*;
 use bevy::{
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig},
     prelude::*,
+    time::common_conditions::on_timer,
     window::{CursorGrabMode, CursorOptions, PresentMode, WindowResolution},
 };
 // use bevy_framepace::FramepacePlugin;
@@ -12,7 +15,6 @@ use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 mod build_menu;
 mod building_menu;
 mod buildings;
-mod chunks;
 mod controls;
 mod effects;
 mod environment;
@@ -96,7 +98,6 @@ fn main() {
         .insert_resource(worldgen::WorldGen::generate())
         .insert_resource(effects::EffectMap::default())
         .insert_resource(controls::Controls::default())
-        .insert_resource(chunks::ChunkIndex::default())
         .add_systems(
             Startup,
             (
@@ -113,11 +114,11 @@ fn main() {
             (
                 (
                     player::update_movement.in_set(TnuaUserControlsSystems),
-                    player::update_active_entities,
                     player::update_hover_target,
                     player::update_hover_action,
                     player::update_interact,
                     player::place_held_building,
+                    player::cull_entities.run_if(on_timer(Duration::from_secs_f32(1.0))),
                 )
                     .run_if(in_state(GameState::Play)),
                 player::update_movement_noinput.run_if(not(in_state(GameState::Play))),

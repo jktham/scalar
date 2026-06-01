@@ -1,4 +1,4 @@
-use avian3d::spatial_query::{RayCaster, RayHits};
+use avian3d::spatial_query::{RayCaster, RayHits, SpatialQueryFilter};
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
     light::{CascadeShadowConfigBuilder, NotShadowCaster},
@@ -6,7 +6,10 @@ use bevy::{
     prelude::*,
 };
 
-use crate::world::{WORLD_SIZE_X, WORLD_SIZE_Z};
+use crate::{
+    player::{self, GameLayer},
+    world::{WORLD_SIZE_X, WORLD_SIZE_Z},
+};
 
 pub fn setup_environment(
     mut commands: Commands,
@@ -59,7 +62,12 @@ pub fn setup_environment(
         Msaa::Off,
         TemporalAntiAliasing::default(),
         Transform::from_xyz(0.0, 0.0, 0.0).looking_to(Vec3::new(1.0, 0.0, 0.0), Vec3::Y),
-        RayCaster::new(Vec3::ZERO, -Dir3::Z).with_max_distance(10.0),
+        RayCaster::new(Vec3::ZERO, -Dir3::Z)
+            .with_max_distance(player::RANGE)
+            .with_query_filter(SpatialQueryFilter::from_mask([
+                GameLayer::Terrain,
+                GameLayer::Object,
+            ])),
         RayHits::default(),
         DistanceFog {
             color: fog_color,
