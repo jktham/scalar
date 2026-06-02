@@ -1,4 +1,7 @@
-use crate::{player::GameLayer, worldgen::WorldGen};
+use crate::{
+    player::{GameLayer, Player},
+    worldgen::WorldGen,
+};
 use core::fmt;
 use std::f32::consts::PI;
 
@@ -134,10 +137,6 @@ pub fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>, rng: &mut Rng) ->
     chunks
 }
 
-#[derive(Component)]
-/// entities with this marker are hidden by player::update_active_entities
-pub struct CullDistance(pub f32);
-
 pub fn setup_world(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -161,10 +160,11 @@ pub fn setup_world(
             Terrain,
             Mesh3d(terrain_mesh),
             MeshMaterial3d(terrain_material),
-            RigidBody::Static,
-            ColliderConstructor::TrimeshFromMesh,
             Transform::from_translation(mesh.1),
-            CullDistance(300.0),
+            RigidBody::Static,
+            VisibleDistance(1.0),
+            Visibility::Visible,
+            ColliderConstructor::TrimeshFromMesh, // dont defer, want this to be available from the start. we tank the number of chunks whatever
             CollisionLayers::new(GameLayer::Terrain, [GameLayer::Player]),
         ));
     }
@@ -213,10 +213,19 @@ pub fn setup_world(
             stack,
             SceneRoot(ore_scene),
             transform,
-            RigidBody::Static,
-            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
-                .with_default_layers(CollisionLayers::new(GameLayer::Object, [GameLayer::Player])),
-            CullDistance(300.0),
+            VisibleDistance(1.0),
+            Visibility::Visible,
+            ColliderDistance(
+                1.0,
+                (
+                    RigidBody::Static,
+                    ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                        .with_default_layers(CollisionLayers::new(
+                            GameLayer::Object,
+                            [GameLayer::Player],
+                        )),
+                ),
+            ),
         ));
     }
     commands.spawn_batch(ore_batch);
@@ -245,10 +254,19 @@ pub fn setup_world(
             stack,
             SceneRoot(tree_scene),
             transform,
-            RigidBody::Static,
-            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
-                .with_default_layers(CollisionLayers::new(GameLayer::Object, [GameLayer::Player])),
-            CullDistance(300.0),
+            VisibleDistance(1.0),
+            Visibility::Visible,
+            ColliderDistance(
+                1.0,
+                (
+                    RigidBody::Static,
+                    ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                        .with_default_layers(CollisionLayers::new(
+                            GameLayer::Object,
+                            [GameLayer::Player],
+                        )),
+                ),
+            ),
         ));
     }
     commands.spawn_batch(tree_batch);
@@ -282,10 +300,19 @@ pub fn setup_world(
             stack,
             SceneRoot(rock_scene),
             transform,
-            RigidBody::Static,
-            ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
-                .with_default_layers(CollisionLayers::new(GameLayer::Object, [GameLayer::Player])),
-            CullDistance(300.0),
+            VisibleDistance(1.0),
+            Visibility::Visible,
+            ColliderDistance(
+                1.0,
+                (
+                    RigidBody::Static,
+                    ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                        .with_default_layers(CollisionLayers::new(
+                            GameLayer::Object,
+                            [GameLayer::Player],
+                        )),
+                ),
+            ),
         ));
     }
     commands.spawn_batch(rock_batch);
@@ -305,17 +332,79 @@ pub fn update_world(
                     commands.spawn((
                         SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
                         *transform,
+                        VisibleDistance(1.0),
+                        Visibility::Visible,
                         RigidBody::Static,
                         ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
                             .with_default_layers(CollisionLayers::new(
                                 GameLayer::Object,
                                 [GameLayer::Player],
                             )),
-                        CullDistance(300.0),
                     ));
                 }
                 _ => {}
             }
         }
     }
+}
+
+#[derive(Component)]
+/// entities with this marker are hidden by world::cull_visibility, value multiple of draw distance
+pub struct VisibleDistance(pub f32);
+
+pub fn cull_visibility(
+    player_transform: Single<&Transform, With<Player>>,
+    entities: Query<(Entity, &Transform, &VisibleDistance)>,
+    mut commands: Commands,
+) {
+    let draw_distance = 300.0;
+
+    let batch = entities
+        .iter()
+        .map(|(e, transform, dist)| {
+            if player_transform.translation.distance(transform.translation)
+                <= dist.0 * draw_distance
+            {
+                (e, Visibility::Visible)
+            } else {
+                (e, Visibility::Hidden)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    commands.insert_batch(batch);
+}
+
+#[derive(Component)]
+/// entities with this marker get collision initialized by world::insert_colliders once in range, value multiple of collision distance
+pub struct ColliderDistance(pub f32, pub (RigidBody, ColliderConstructorHierarchy));
+
+// initialize colliders only once in range, prevent 5s freeze at start
+pub fn insert_colliders(
+    player_transform: Single<&Transform, With<Player>>,
+    entities: Query<(Entity, &Transform, &ColliderDistance)>,
+    entities_with_collider: Query<(Entity, &Transform, &ColliderDistance), With<RigidBody>>,
+    mut commands: Commands,
+) {
+    let collision_distance = 20.0;
+
+    // build collider hierarchy
+    let batch = entities
+        .iter()
+        .filter_map(|(e, transform, dist)| {
+            if player_transform.translation.distance(transform.translation)
+                <= dist.0 * collision_distance
+                // dont recalculate
+                && entities_with_collider.get(e).is_err()
+            {
+                Some((e, dist.1.clone()))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    commands.insert_batch_if_new(batch);
+
+    // todo: toggle ColliderDisabled on children, figure out performant way
 }

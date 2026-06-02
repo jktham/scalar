@@ -118,7 +118,8 @@ fn main() {
                     player::update_hover_action,
                     player::update_interact,
                     player::place_held_building,
-                    player::cull_entities.run_if(on_timer(Duration::from_secs_f32(1.0))),
+                    world::cull_visibility.run_if(on_timer(Duration::from_secs_f32(1.0))),
+                    world::insert_colliders.run_if(on_timer(Duration::from_secs_f32(1.0))),
                 )
                     .run_if(in_state(GameState::Play)),
                 player::update_movement_noinput.run_if(not(in_state(GameState::Play))),

@@ -13,7 +13,6 @@ use crate::controls::Action;
 use crate::controls::Controls;
 use crate::effects::EffectMap;
 use crate::inventory::Item;
-use crate::world::CullDistance;
 use crate::world::ResourceNode;
 use crate::world::Terrain;
 use crate::worldgen::WorldGen;
@@ -198,27 +197,6 @@ pub fn update_movement_noinput(
     };
 
     camera_transform.translation = player_transform.translation + Vec3::new(0.0, 0.0, 0.0);
-}
-
-pub fn cull_entities(
-    player_transform: Single<&Transform, With<Player>>,
-    entities: Query<(Entity, &Transform, &CullDistance)>,
-    mut commands: Commands,
-) {
-    let batch = entities
-        .iter()
-        .collect::<Vec<_>>()
-        .iter()
-        .map(|(e, transform, dist)| {
-            if player_transform.translation.distance(transform.translation) <= dist.0 {
-                (*e, Visibility::Visible)
-            } else {
-                (*e, Visibility::Hidden)
-            }
-        })
-        .collect::<Vec<_>>();
-
-    commands.insert_batch(batch);
 }
 
 pub const RANGE: f32 = 6.0;
