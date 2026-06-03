@@ -1,0 +1,79 @@
+## todo
+
+- game
+    - [x] 3d camera
+    - [x] resource nodes
+    - [x] hover interact
+    - [x] player collision
+    - [x] controls map
+    - [x] buildings
+        - [x] miner
+        - [x] processor
+        - [x] satellite dish
+        - [ ] drone hub
+        - [ ] material processing?
+    - [x] building placement
+    - [x] building cost
+    - [x] fuel consumption
+    - [ ] power/data wires
+    - [ ] drones
+    - [ ] research
+    - [ ] figure out gameplay loop
+    - [ ] balancing
+
+- worldgen
+    - [x] terrain mesh
+    - [x] perlin octave heightmap
+    - [ ] node placement
+    - [ ] surrounding ocean
+    - [ ] biomes
+    - [ ] mountains
+    - [ ] rivers/lakes
+    - [ ] pollution system
+
+- visuals
+    - [x] smoke particles
+    - [ ] decent models
+        - [ ] tree
+        - [ ] rock
+        - [ ] ore
+        - [ ] miner
+        - [ ] processor
+        - [ ] satellite dish
+    - [ ] building placement ghost
+    - [ ] foliage
+    - [ ] grass
+    - [ ] water
+    - [ ] ground types
+    - [ ] animals
+    - [ ] pollution effects
+    - [ ] day/night cycle
+
+- ui
+    - [ ] ugly
+        - [x] hud
+        - [x] pause
+        - [ ] settings
+        - [x] build
+        - [x] building
+        - [ ] research
+        - [ ] stats
+        - [ ] map
+    - [ ] pretty
+        - [ ] hud
+        - [ ] pause
+        - [ ] settings
+        - [ ] build
+        - [ ] building
+        - [ ] research
+        - [ ] stats
+        - [ ] map
+
+- engine
+    - [x] distance culling
+    - [ ] collider culling
+    - [x] defer collision hierarchy
+    - [ ] grass system
+    - [ ] LOD
+    - [ ] chunk loading/unloading
+    - [ ] save/load game state
