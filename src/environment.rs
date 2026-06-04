@@ -20,7 +20,7 @@ pub fn setup_environment(
     let sky_color = Color::srgb(0.35, 0.48, 0.66);
     let sun_color = Color::srgb(0.98, 0.95, 0.82);
     let fog_color = Color::srgba(0.35, 0.48, 0.66, 1.0);
-    let water_color = Color::srgba(0.059, 0.259, 0.631, 0.8);
+    let water_color = Color::srgba(0.039, 0.165, 0.392, 0.9);
 
     // skybox
     commands.spawn((
@@ -45,6 +45,8 @@ pub fn setup_environment(
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: water_color,
             perceptual_roughness: 0.8,
+            alpha_mode: AlphaMode::Blend,
+            cull_mode: None,
             ..default()
         })),
         Transform::from_translation(Vec3::new(0.0, ocean_height, 0.0)),

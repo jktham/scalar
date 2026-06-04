@@ -5,7 +5,7 @@ use crate::{
 use core::fmt;
 use std::f32::consts::PI;
 
-use crate::inventory::{Item, ItemStack};
+use crate::inventory::ItemStack;
 use avian3d::{
     collision::collider::{ColliderConstructor, ColliderConstructorHierarchy, CollisionLayers},
     dynamics::rigid_body::RigidBody,
@@ -106,7 +106,7 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut
             let color = Vec4::new(
                 (rng.f32() * 0.3 + ground_color.red * 0.7) * 0.3,
                 (rng.f32() * 0.3 + ground_color.green * 0.7) * 0.3,
-                (rng.f32() * 0.05 + ground_color.blue * 0.95) * 0.3,
+                (rng.f32() * 0.1 + ground_color.blue * 0.90) * 0.3,
                 1.0,
             );
             colors.push(color);
@@ -175,47 +175,17 @@ pub fn setup_world(
 
     // ore
     let mut ore_batch = Vec::new();
-    for _ in 0..500 {
-        let mut pos = vec3(
-            rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
-            0.0,
-            rng.f32() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
-        );
-        pos.y = worldgen.get_height(pos.x, pos.z);
-        let rot = Quat::from_rotation_y(rng.f32() * std::f32::consts::TAU);
-
-        let normal = worldgen.get_normal(pos.x, pos.z);
-        let normal_rot =
-            Quat::from_axis_angle(normal.cross(Vec3::Y), -f32::acos(normal.dot(Vec3::Y)));
-
-        let variant = rng.i32(0..3);
-        let stack = match variant {
-            0 => ItemStack {
-                item: Item::Iron,
-                count: rng.i32(100..1000),
-            },
-            1 => ItemStack {
-                item: Item::Copper,
-                count: rng.i32(100..1000),
-            },
-            _ => ItemStack {
-                item: Item::Coal,
-                count: rng.i32(100..1000),
-            },
-        };
-
-        let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
-        let ore_scene = match variant {
-            0 => asset_server.load::<Scene>("node_iron.glb#Scene0"),
-            1 => asset_server.load::<Scene>("node_copper.glb#Scene0"),
-            _ => asset_server.load::<Scene>("node_coal.glb#Scene0"),
-        };
+    for (transform, stack) in &worldgen.ore_nodes {
+        let ore_scene = asset_server.load::<Scene>(format!(
+            "node_{}.glb#Scene0",
+            format!("{}", stack.item).to_lowercase()
+        ));
 
         ore_batch.push((
             ResourceNode::Ore,
-            stack,
+            *stack,
             SceneRoot(ore_scene),
-            transform,
+            *transform,
             VisibleDistance(1.0),
             Visibility::Visible,
             ColliderDistance(
@@ -235,28 +205,14 @@ pub fn setup_world(
 
     // trees
     let mut tree_batch = Vec::new();
-    for _ in 0..20000 {
-        let mut pos = vec3(
-            rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
-            0.0,
-            rng.f32() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
-        );
-        pos.y = worldgen.get_height(pos.x, pos.z);
-        let rot = Quat::from_rotation_y(rng.f32() * std::f32::consts::TAU);
-
-        let stack = ItemStack {
-            item: Item::Wood,
-            count: 5,
-        };
-
-        let transform = Transform::from_translation(pos).with_rotation(rot);
+    for (transform, stack) in &worldgen.tree_nodes {
         let tree_scene = asset_server.load::<Scene>("tree.glb#Scene0");
 
         tree_batch.push((
             ResourceNode::Tree,
-            stack,
+            *stack,
             SceneRoot(tree_scene),
-            transform,
+            *transform,
             VisibleDistance(1.0),
             Visibility::Visible,
             ColliderDistance(
@@ -276,33 +232,14 @@ pub fn setup_world(
 
     // rocks
     let mut rock_batch = Vec::new();
-    for _ in 0..4000 {
-        let mut pos = vec3(
-            rng.f32() * WORLD_SIZE_X - WORLD_SIZE_X / 2.0,
-            0.0,
-            rng.f32() * WORLD_SIZE_Z - WORLD_SIZE_Z / 2.0,
-        );
-        pos.y = worldgen.get_height(pos.x, pos.z);
-        let rot = Quat::from_rotation_y(rng.f32() * std::f32::consts::TAU);
-
-        let normal = worldgen.get_normal(pos.x, pos.z);
-        let normal_rot =
-            Quat::from_axis_angle(normal.cross(Vec3::Y), -f32::acos(normal.dot(Vec3::Y)));
-
-        let stack = ItemStack {
-            item: Item::Stone,
-            count: 1,
-        };
-
-        let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
-        let variant = rng.i32(0..3);
+    for (transform, stack, variant) in &worldgen.rock_nodes {
         let rock_scene = asset_server.load::<Scene>(format!("rock_{}.glb#Scene0", variant));
 
         rock_batch.push((
             ResourceNode::Rock,
-            stack,
+            *stack,
             SceneRoot(rock_scene),
-            transform,
+            *transform,
             VisibleDistance(1.0),
             Visibility::Visible,
             ColliderDistance(

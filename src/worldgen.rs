@@ -11,6 +11,8 @@ use fastrand::Rng;
 use image::ColorType;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
+use crate::inventory::{Item, ItemStack};
+
 fn smoothstep(a: f32, b: f32, w: f32) -> f32 {
     (b - a) * (3.0 - w * 2.0) * w * w + a
 }
@@ -105,19 +107,21 @@ pub const TERRAIN_N: usize = 2000; // n*n array size
 pub const TERRAIN_RESOLUTION: f32 = 1.0; // pixels per meter
 pub const TERRAIN_SIZE: f32 = TERRAIN_N as f32 / TERRAIN_RESOLUTION;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum Ground {
+    Sand,
     Grass,
     Dirt,
-    Sand,
+    Stone,
 }
 
 impl Ground {
     pub fn color(&self) -> Color {
         match self {
+            Ground::Sand => Color::srgb(0.906, 0.937, 0.447),
             Ground::Grass => Color::srgb(0.098, 0.718, 0.18),
             Ground::Dirt => Color::srgb(0.584, 0.361, 0.102),
-            Ground::Sand => Color::srgb(0.906, 0.937, 0.447),
+            Ground::Stone => Color::srgb(0.498, 0.612, 0.702),
         }
     }
 }
@@ -127,6 +131,9 @@ pub struct WorldGen {
     height: Vec<f32>,
     normal: Vec<Vec3>,
     ground: Vec<Ground>,
+    pub ore_nodes: Vec<(Transform, ItemStack)>,
+    pub tree_nodes: Vec<(Transform, ItemStack)>,
+    pub rock_nodes: Vec<(Transform, ItemStack, i32 /* variant */)>,
 }
 
 impl WorldGen {
@@ -135,19 +142,17 @@ impl WorldGen {
             height: vec![0.0; TERRAIN_N * TERRAIN_N],
             normal: vec![Vec3::Y; TERRAIN_N * TERRAIN_N],
             ground: vec![Ground::Dirt; TERRAIN_N * TERRAIN_N],
+            ore_nodes: Vec::new(),
+            tree_nodes: Vec::new(),
+            rock_nodes: Vec::new(),
         }
     }
 
     pub fn generate() -> Self {
-        let t0 = Instant::now();
-        println!("running worldgen, {TERRAIN_N}x{TERRAIN_N}");
-
         let mut worldgen = WorldGen::new();
 
         worldgen.generate_maps();
-
-        let t1 = Instant::now();
-        println!("done, {:.2}s", (t1 - t0).as_secs_f32());
+        worldgen.place_nodes();
 
         worldgen.dump(std::path::Path::new("./output"));
 
@@ -155,6 +160,9 @@ impl WorldGen {
     }
 
     pub fn generate_maps(&mut self) {
+        let t0 = Instant::now();
+        println!("generating worldgen maps, {TERRAIN_N}x{TERRAIN_N}");
+
         // terrain height
         let xz_scale = 1.0 / 200.0;
         let offset = 1000.0;
@@ -212,24 +220,135 @@ impl WorldGen {
         // ground type
         self.ground.par_iter_mut().enumerate().for_each(|(i, v)| {
             if self.height[i] < 3.0 {
-                // coast and under ocean
+                // coast and ocean
                 *v = Ground::Sand;
-            } else if self.normal[i].dot(Vec3::Y) > 0.8 {
-                // flat plateaus
+            } else if self.normal[i].dot(Vec3::Y).abs().acos() < f32::to_radians(35.0) {
+                // flat plateau
                 *v = Ground::Grass;
-            } else {
-                // steep inclines
+            } else if self.normal[i].dot(Vec3::Y).abs().acos() < f32::to_radians(50.0) {
+                // mild incline
                 *v = Ground::Dirt;
+            } else {
+                // steep incline
+                *v = Ground::Stone;
             }
         });
-    }
 
         let t1 = Instant::now();
         println!("done, {:.2}s", (t1 - t0).as_secs_f32());
+    }
 
-        worldgen.dump(std::path::Path::new("./output"));
+    pub fn place_nodes(&mut self) {
+        let t0 = Instant::now();
+        println!(
+            "generating worldgen nodes, {} ores, {} trees, {} rocks",
+            N_ORES, N_TREES, N_ROCKS
+        );
 
-        worldgen
+        let mut rng = Rng::with_seed(67);
+
+        // ore
+        const N_ORES: usize = 1_000;
+        self.ore_nodes.reserve(N_ORES);
+        for _ in 0..N_ORES {
+            let mut pos = vec3(
+                rng.f32() * TERRAIN_SIZE - TERRAIN_SIZE / 2.0,
+                0.0,
+                rng.f32() * TERRAIN_SIZE - TERRAIN_SIZE / 2.0,
+            );
+            pos.y = self.get_height(pos.x, pos.z);
+
+            if self.get_ground(pos.x, pos.z) == Ground::Sand {
+                continue;
+            }
+
+            let rot = Quat::from_rotation_y(rng.f32() * std::f32::consts::TAU);
+            let normal = self.get_normal(pos.x, pos.z);
+            let normal_rot =
+                Quat::from_axis_angle(normal.cross(Vec3::Y), -f32::acos(normal.dot(Vec3::Y)));
+
+            let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
+
+            let variant = rng.i32(0..3);
+            let stack = match variant {
+                0 => ItemStack {
+                    item: Item::Iron,
+                    count: rng.i32(100..1000),
+                },
+                1 => ItemStack {
+                    item: Item::Copper,
+                    count: rng.i32(100..1000),
+                },
+                _ => ItemStack {
+                    item: Item::Coal,
+                    count: rng.i32(100..1000),
+                },
+            };
+
+            self.ore_nodes.push((transform, stack));
+        }
+
+        // trees
+        const N_TREES: usize = 30_000;
+        self.tree_nodes.reserve(N_TREES);
+        for _ in 0..N_TREES {
+            let mut pos = vec3(
+                rng.f32() * TERRAIN_SIZE - TERRAIN_SIZE / 2.0,
+                0.0,
+                rng.f32() * TERRAIN_SIZE - TERRAIN_SIZE / 2.0,
+            );
+            pos.y = self.get_height(pos.x, pos.z);
+
+            if self.get_ground(pos.x, pos.z) == Ground::Sand
+                || self.get_ground(pos.x, pos.z) == Ground::Stone
+            {
+                continue; // no trees
+            }
+            if self.get_ground(pos.x, pos.z) == Ground::Dirt && rng.f32() > 0.3 {
+                continue; // less trees
+            }
+
+            let rot = Quat::from_rotation_y(rng.f32() * std::f32::consts::TAU);
+
+            let transform = Transform::from_translation(pos).with_rotation(rot);
+
+            let stack = ItemStack {
+                item: Item::Wood,
+                count: 5,
+            };
+
+            self.tree_nodes.push((transform, stack));
+        }
+
+        // rocks
+        const N_ROCKS: usize = 8_000;
+        self.rock_nodes.reserve(N_ROCKS);
+        for _ in 0..N_ROCKS {
+            let mut pos = vec3(
+                rng.f32() * TERRAIN_SIZE - TERRAIN_SIZE / 2.0,
+                0.0,
+                rng.f32() * TERRAIN_SIZE - TERRAIN_SIZE / 2.0,
+            );
+            pos.y = self.get_height(pos.x, pos.z);
+
+            let rot = Quat::from_rotation_y(rng.f32() * std::f32::consts::TAU);
+            let normal = self.get_normal(pos.x, pos.z);
+            let normal_rot =
+                Quat::from_axis_angle(normal.cross(Vec3::Y), -f32::acos(normal.dot(Vec3::Y)));
+
+            let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
+
+            let variant = rng.i32(0..3);
+            let stack = ItemStack {
+                item: Item::Stone,
+                count: 1,
+            };
+
+            self.rock_nodes.push((transform, stack, variant));
+        }
+
+        let t1 = Instant::now();
+        println!("done, {:.2}s", (t1 - t0).as_secs_f32());
     }
 
     /// interpolated terrain height at meters x, z
@@ -270,7 +389,7 @@ impl WorldGen {
 
         // check bounds
         if ix < 0.0 || ix >= TERRAIN_N as f32 - 1.0 || iz < 0.0 || iz >= TERRAIN_N as f32 - 1.0 {
-            return Ground::Dirt;
+            return Ground::Sand;
         }
 
         self.ground[ix as usize * TERRAIN_N + iz as usize]
@@ -336,6 +455,51 @@ impl WorldGen {
                         (color.to_srgba().red * 255.0) as u8,
                         (color.to_srgba().green * 255.0) as u8,
                         (color.to_srgba().blue * 255.0) as u8,
+                    ]
+                })
+                .collect::<Vec<u8>>()
+                .as_slice(),
+            TERRAIN_N as u32,
+            TERRAIN_N as u32,
+            ColorType::Rgb8,
+        )
+        .unwrap();
+
+        // nodes
+        fn pos_to_index(pos: Vec3) -> usize {
+            let p = pos + Vec3::new(TERRAIN_SIZE / 2.0, 0.0, TERRAIN_SIZE / 2.0);
+            let x = p.x.floor() as usize;
+            let z = p.z.floor() as usize;
+            let i = x * TERRAIN_N + z;
+            i
+        }
+
+        let mut nodes = vec![Vec3::ZERO; TERRAIN_N * TERRAIN_N];
+        for (transform, stack) in &self.ore_nodes {
+            nodes[pos_to_index(transform.translation)] = match stack.item {
+                Item::Iron => Color::srgb(0., 0.718, 1.).to_srgba().to_vec3(),
+                Item::Copper => Color::srgb(1., 0.2, 0.).to_srgba().to_vec3(),
+                _ => Color::srgb(0.133, 0.133, 0.133).to_srgba().to_vec3(),
+            }
+        }
+        for (transform, _) in &self.tree_nodes {
+            nodes[pos_to_index(transform.translation)] =
+                Color::srgb(0., 1., 0.).to_srgba().to_vec3();
+        }
+        for (transform, _, _) in &self.rock_nodes {
+            nodes[pos_to_index(transform.translation)] =
+                Color::srgb(0.718, 0.718, 0.718).to_srgba().to_vec3();
+        }
+
+        image::save_buffer(
+            path.join("nodes.png"),
+            nodes
+                .iter()
+                .flat_map(|v| {
+                    [
+                        (v.x * 255.0) as u8,
+                        (v.y * 255.0) as u8,
+                        (v.z * 255.0) as u8,
                     ]
                 })
                 .collect::<Vec<u8>>()

@@ -24,8 +24,9 @@
 - worldgen
     - [x] terrain mesh
     - [x] perlin octave heightmap
-    - [ ] node placement
-    - [ ] surrounding ocean
+    - [x] node placement
+    - [x] surrounding ocean
+    - [x] ground types
     - [ ] biomes
     - [ ] mountains
     - [ ] rivers/lakes
@@ -44,7 +45,6 @@
     - [ ] foliage
     - [ ] grass
     - [ ] water
-    - [ ] ground types
     - [ ] animals
     - [ ] pollution effects
     - [ ] day/night cycle
