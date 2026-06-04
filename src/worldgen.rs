@@ -338,11 +338,16 @@ impl WorldGen {
 
             let transform = Transform::from_translation(pos).with_rotation(normal_rot * rot);
 
-            let variant = rng.i32(0..3);
-            let stack = ItemStack {
+            let mut variant = rng.i32(0..2);
+            let mut stack = ItemStack {
                 item: Item::Stone,
                 count: 1,
             };
+            if rng.f32() < 0.02 {
+                // rare big rock :)
+                variant = 2;
+                stack.count = 10;
+            }
 
             self.rock_nodes.push((transform, stack, variant));
         }
