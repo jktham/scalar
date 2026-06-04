@@ -47,7 +47,7 @@ pub fn create_smoke_effect(
     let v = x.clone().vec3(y, z);
     let init_vel = SetAttributeModifier::new(Attribute::VELOCITY, v.expr());
 
-    let lifetime = writer.lit(30.0).expr();
+    let lifetime = writer.lit(100.0).expr();
     let init_lifetime = SetAttributeModifier::new(Attribute::LIFETIME, lifetime);
 
     let s = writer.lit(0.0);

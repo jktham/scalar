@@ -131,7 +131,7 @@ pub fn setup_player(
 
 pub fn update_movement(
     mut player_controller: Single<&mut TnuaController<ControlScheme>, With<Player>>,
-    player_transform: Single<&mut Transform, With<Player>>,
+    mut player_transform: Single<&mut Transform, With<Player>>,
     mut camera_transform: Single<&mut Transform, (With<Camera>, Without<Player>)>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
@@ -157,7 +157,7 @@ pub fn update_movement(
         movement -= front;
     }
 
-    const SPEED: f32 = 0.5;
+    const SPEED: f32 = 5.5;
     let mut speed = SPEED;
     if keyboard_input.pressed(controls.get(Action::Sprint)) {
         speed *= 2.0;
@@ -175,6 +175,10 @@ pub fn update_movement(
         player_controller.action(ControlScheme::Jump(Default::default()));
     }
 
+    if player_transform.translation.y < -1000.0 {
+        player_transform.translation.y = 1000.0;
+    }
+
     // update camera
     const SENSITIVITY: f32 = 0.001;
     camera_transform.rotation = Quat::from_rotation_y(-mouse_motion.delta.x * SENSITIVITY)
@@ -187,7 +191,7 @@ pub fn update_movement(
 /// set movement to zero and update camera transform without adding new movement input
 pub fn update_movement_noinput(
     mut player_controller: Single<&mut TnuaController<ControlScheme>, With<Player>>,
-    player_transform: Single<&mut Transform, With<Player>>,
+    mut player_transform: Single<&mut Transform, With<Player>>,
     mut camera_transform: Single<&mut Transform, (With<Camera>, Without<Player>)>,
 ) {
     player_controller.initiate_action_feeding();
@@ -195,6 +199,10 @@ pub fn update_movement_noinput(
         desired_motion: Vec3::ZERO,
         desired_forward: None,
     };
+
+    if player_transform.translation.y < -1000.0 {
+        player_transform.translation.y = 1000.0;
+    }
 
     camera_transform.translation = player_transform.translation + Vec3::new(0.0, 0.0, 0.0);
 }

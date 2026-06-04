@@ -20,7 +20,7 @@ use fastrand::Rng;
 #[derive(Component)]
 pub struct Terrain;
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Copy, Clone)]
 pub enum ResourceNode {
     Ore,
     Tree,
@@ -37,9 +37,9 @@ impl fmt::Display for ResourceNode {
     }
 }
 
-pub const N_CHUNKS: i32 = 24;
-pub const N_TILES_X: i32 = 40; // should be even
-pub const N_TILES_Z: i32 = 70;
+pub const N_CHUNKS: i32 = 22;
+pub const N_TILES_X: i32 = 60; // should be even
+pub const N_TILES_Z: i32 = 104;
 pub const TILE_RADIUS: f32 = 1.0;
 
 pub const CHUNK_SIZE_X: f32 = N_TILES_X as f32 * TILE_RADIUS * 3.0 / 2.0;
@@ -59,11 +59,12 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut
     let mut colors = Vec::new();
 
     let global_offset = Vec3::new(cx, 0.0, cz);
-    let mut offset = Vec3::ZERO;
+    let inital_offset = Vec3::new(-CHUNK_SIZE_X / 2.0, 0.0, -CHUNK_SIZE_Z / 2.0);
+    let mut offset = inital_offset;
 
     for ix in 0..N_TILES_X {
         offset.x += 3.0 / 2.0 * TILE_RADIUS;
-        offset.z = 0.0;
+        offset.z = inital_offset.z;
 
         for iz in 0..N_TILES_Z {
             offset.z += f32::sin(2.0 / 3.0 * PI) * TILE_RADIUS;
@@ -98,12 +99,14 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut
             normals.push(normal);
             normals.push(normal);
 
-            let steepness = normal.dot(Vec3::Y).powf(10.0);
+            let ground =
+                worldgen.get_ground(global_offset.x + center.x, global_offset.z + center.z);
+            let ground_color = ground.color().to_srgba();
 
             let color = Vec4::new(
-                rng.f32() * 0.1 + (1.0 - steepness) * 0.1,
-                rng.f32() * 0.1 + steepness * 0.1 + 0.1,
-                rng.f32() * 0.05 + (1.0 - steepness) * 0.05,
+                (rng.f32() * 0.3 + ground_color.red * 0.7) * 0.3,
+                (rng.f32() * 0.3 + ground_color.green * 0.7) * 0.3,
+                (rng.f32() * 0.05 + ground_color.blue * 0.95) * 0.3,
                 1.0,
             );
             colors.push(color);
@@ -126,8 +129,8 @@ pub fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>, rng: &mut Rng) ->
     let mut chunks = Vec::new();
     for icx in 0..N_CHUNKS {
         for icz in 0..N_CHUNKS {
-            let cx = icx as f32 * CHUNK_SIZE_X - WORLD_SIZE_X / 2.0;
-            let cz = icz as f32 * CHUNK_SIZE_Z - WORLD_SIZE_Z / 2.0;
+            let cx = icx as f32 * CHUNK_SIZE_X - WORLD_SIZE_X / 2.0 + CHUNK_SIZE_X / 2.0;
+            let cz = icz as f32 * CHUNK_SIZE_Z - WORLD_SIZE_Z / 2.0 + CHUNK_SIZE_Z / 2.0;
             chunks.push((
                 generate_chunk_mesh(cx, cz, worldgen, rng),
                 Vec3::new(cx, 0.0, cz),
@@ -162,7 +165,7 @@ pub fn setup_world(
             MeshMaterial3d(terrain_material),
             Transform::from_translation(mesh.1),
             RigidBody::Static,
-            VisibleDistance(1.0),
+            VisibleDistance(1.25),
             Visibility::Visible,
             ColliderConstructor::TrimeshFromMesh, // dont defer, want this to be available from the start. we tank the number of chunks whatever
             CollisionLayers::new(GameLayer::Terrain, [GameLayer::Player]),

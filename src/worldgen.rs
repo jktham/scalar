@@ -101,13 +101,32 @@ where
     fx0 * (1.0 - dz) + fx1 * dz
 }
 
-pub const TERRAIN_N: usize = 1500; // n*n array size
+pub const TERRAIN_N: usize = 2000; // n*n array size
 pub const TERRAIN_RESOLUTION: f32 = 1.0; // pixels per meter
+pub const TERRAIN_SIZE: f32 = TERRAIN_N as f32 / TERRAIN_RESOLUTION;
+
+#[derive(Copy, Clone)]
+pub enum Ground {
+    Grass,
+    Dirt,
+    Sand,
+}
+
+impl Ground {
+    pub fn color(&self) -> Color {
+        match self {
+            Ground::Grass => Color::srgb(0.098, 0.718, 0.18),
+            Ground::Dirt => Color::srgb(0.584, 0.361, 0.102),
+            Ground::Sand => Color::srgb(0.906, 0.937, 0.447),
+        }
+    }
+}
 
 #[derive(Resource)]
 pub struct WorldGen {
     height: Vec<f32>,
     normal: Vec<Vec3>,
+    ground: Vec<Ground>,
 }
 
 impl WorldGen {
@@ -115,6 +134,7 @@ impl WorldGen {
         Self {
             height: vec![0.0; TERRAIN_N * TERRAIN_N],
             normal: vec![Vec3::Y; TERRAIN_N * TERRAIN_N],
+            ground: vec![Ground::Dirt; TERRAIN_N * TERRAIN_N],
         }
     }
 
@@ -124,54 +144,85 @@ impl WorldGen {
 
         let mut worldgen = WorldGen::new();
 
+        worldgen.generate_maps();
+
+        let t1 = Instant::now();
+        println!("done, {:.2}s", (t1 - t0).as_secs_f32());
+
+        worldgen.dump(std::path::Path::new("./output"));
+
+        worldgen
+    }
+
+    pub fn generate_maps(&mut self) {
         // terrain height
-        let xz_scale = 0.01;
+        let xz_scale = 1.0 / 200.0;
         let offset = 1000.0;
-        let y_scale = 100.0;
+        let y_scale = 300.0;
 
         let compute_height = |x: f32, z: f32| -> f32 {
-            perlin_octaves(
+            let dist = f32::max(
+                (x - TERRAIN_SIZE / 2.0).abs(),
+                (z - TERRAIN_SIZE / 2.0).abs(),
+            ) / (TERRAIN_SIZE / 2.0);
+            let falloff = dist.powf(2.0) * 200.0;
+
+            let height = perlin_octaves(
                 (x * xz_scale + offset) / TERRAIN_RESOLUTION,
                 (z * xz_scale + offset) / TERRAIN_RESOLUTION,
-                3,
-                2.0,
+                5,
+                1.8,
                 0.5,
             ) * y_scale
+                - falloff;
+
+            if height < 0.0 {
+                height / 2.0 // flatten off underwater
+            } else {
+                height
+            }
         };
 
-        worldgen
-            .height
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(i, v)| {
-                let x = (i / TERRAIN_N) as f32;
-                let z = (i % TERRAIN_N) as f32;
+        self.height.par_iter_mut().enumerate().for_each(|(i, v)| {
+            let x = (i / TERRAIN_N) as f32;
+            let z = (i % TERRAIN_N) as f32;
 
-                *v = compute_height(x, z);
-            });
+            *v = compute_height(x, z);
+        });
 
         // terrain normal
-        worldgen
-            .normal
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(i, v)| {
-                let x = (i / TERRAIN_N) as f32;
-                let z = (i % TERRAIN_N) as f32;
+        self.normal.par_iter_mut().enumerate().for_each(|(i, v)| {
+            let x = (i / TERRAIN_N) as f32;
+            let z = (i % TERRAIN_N) as f32;
 
-                let h = 0.5;
-                let dx = (compute_height(x + h, z) - compute_height(x - h, z))
-                    / (2.0 * h / TERRAIN_RESOLUTION);
-                let dz = (compute_height(x, z + h) - compute_height(x, z - h))
-                    / (2.0 * h / TERRAIN_RESOLUTION);
+            let h = 0.5;
+            let dx = (compute_height(x + h, z) - compute_height(x - h, z))
+                / (2.0 * h / TERRAIN_RESOLUTION);
+            let dz = (compute_height(x, z + h) - compute_height(x, z - h))
+                / (2.0 * h / TERRAIN_RESOLUTION);
 
-                let tx = Vec3::new(1.0, dx, 0.0);
-                let tz = Vec3::new(0.0, dz, 1.0);
+            let tx = Vec3::new(1.0, dx, 0.0);
+            let tz = Vec3::new(0.0, dz, 1.0);
 
-                let n = tz.cross(tx).normalize();
+            let n = tz.cross(tx).normalize();
 
-                *v = n;
-            });
+            *v = n;
+        });
+
+        // ground type
+        self.ground.par_iter_mut().enumerate().for_each(|(i, v)| {
+            if self.height[i] < 3.0 {
+                // coast and under ocean
+                *v = Ground::Sand;
+            } else if self.normal[i].dot(Vec3::Y) > 0.8 {
+                // flat plateaus
+                *v = Ground::Grass;
+            } else {
+                // steep inclines
+                *v = Ground::Dirt;
+            }
+        });
+    }
 
         let t1 = Instant::now();
         println!("done, {:.2}s", (t1 - t0).as_secs_f32());
@@ -185,7 +236,7 @@ impl WorldGen {
     pub fn get_height(&self, x: f32, z: f32) -> f32 {
         // map [-t/2, t/2] -> [0, t]
         let ix = (x * TERRAIN_RESOLUTION) + TERRAIN_N as f32 / 2.0;
-        let iz: f32 = (z * TERRAIN_RESOLUTION) + TERRAIN_N as f32 / 2.0;
+        let iz = (z * TERRAIN_RESOLUTION) + TERRAIN_N as f32 / 2.0;
 
         // check bounds
         if ix < 0.0 || ix >= TERRAIN_N as f32 - 1.0 || iz < 0.0 || iz >= TERRAIN_N as f32 - 1.0 {
@@ -200,7 +251,7 @@ impl WorldGen {
     pub fn get_normal(&self, x: f32, z: f32) -> Vec3 {
         // map [-t/2, t/2] -> [0, t]
         let ix = (x * TERRAIN_RESOLUTION) + TERRAIN_N as f32 / 2.0;
-        let iz: f32 = (z * TERRAIN_RESOLUTION) + TERRAIN_N as f32 / 2.0;
+        let iz = (z * TERRAIN_RESOLUTION) + TERRAIN_N as f32 / 2.0;
 
         // check bounds
         if ix < 0.0 || ix >= TERRAIN_N as f32 - 1.0 || iz < 0.0 || iz >= TERRAIN_N as f32 - 1.0 {
@@ -211,14 +262,28 @@ impl WorldGen {
         bilinear_interp::<Vec3>(ix, iz, &self.normal).normalize()
     }
 
+    /// closest ground type at meters x, z
+    pub fn get_ground(&self, x: f32, z: f32) -> Ground {
+        // map [-t/2, t/2] -> [0, t]
+        let ix = (x * TERRAIN_RESOLUTION) + TERRAIN_N as f32 / 2.0;
+        let iz = (z * TERRAIN_RESOLUTION) + TERRAIN_N as f32 / 2.0;
+
+        // check bounds
+        if ix < 0.0 || ix >= TERRAIN_N as f32 - 1.0 || iz < 0.0 || iz >= TERRAIN_N as f32 - 1.0 {
+            return Ground::Dirt;
+        }
+
+        self.ground[ix as usize * TERRAIN_N + iz as usize]
+    }
+
     /// dump data as pngs in path
     pub fn dump(&self, path: &Path) {
         let t0 = Instant::now();
         println!("dumping worldgen data to {}", path.display());
 
         // height
-        let min_height = self.height.iter().copied().reduce(f32::min).unwrap_or(0.0);
-        let max_height = self.height.iter().copied().reduce(f32::max).unwrap_or(1.0);
+        let min_height = 0.0;
+        let max_height = 200.0;
 
         fn normalize_float(f: f32, min: f32, max: f32) -> f32 {
             if min == max {
@@ -250,6 +315,27 @@ impl WorldGen {
                         (v.x * 255.0) as u8,
                         (v.y * 255.0) as u8,
                         (v.z * 255.0) as u8,
+                    ]
+                })
+                .collect::<Vec<u8>>()
+                .as_slice(),
+            TERRAIN_N as u32,
+            TERRAIN_N as u32,
+            ColorType::Rgb8,
+        )
+        .unwrap();
+
+        // ground
+        image::save_buffer(
+            path.join("ground.png"),
+            self.ground
+                .iter()
+                .flat_map(|g| {
+                    let color = g.color();
+                    [
+                        (color.to_srgba().red * 255.0) as u8,
+                        (color.to_srgba().green * 255.0) as u8,
+                        (color.to_srgba().blue * 255.0) as u8,
                     ]
                 })
                 .collect::<Vec<u8>>()

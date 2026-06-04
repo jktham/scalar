@@ -24,7 +24,7 @@ impl fmt::Display for Item {
     }
 }
 
-#[derive(Component, Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Component, Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub struct ItemStack {
     pub item: Item,
     pub count: i32,

@@ -8,21 +8,23 @@ use bevy::{
 
 use crate::{
     player::{self, GameLayer},
-    world::{WORLD_SIZE_X, WORLD_SIZE_Z},
+    worldgen::TERRAIN_SIZE,
 };
 
 pub fn setup_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    // asset_server: Res<AssetServer>,
 ) {
     let sky_color = Color::srgb(0.35, 0.48, 0.66);
     let sun_color = Color::srgb(0.98, 0.95, 0.82);
     let fog_color = Color::srgba(0.35, 0.48, 0.66, 1.0);
+    let water_color = Color::srgba(0.059, 0.259, 0.631, 0.8);
 
     // skybox
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(WORLD_SIZE_X, 1000.0, WORLD_SIZE_Z))),
+        Mesh3d(meshes.add(Cuboid::new(TERRAIN_SIZE, TERRAIN_SIZE, TERRAIN_SIZE))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: sky_color,
             unlit: true,
@@ -30,6 +32,22 @@ pub fn setup_environment(
             ..default()
         })),
         Transform::from_scale(Vec3::splat(1.0)),
+        NotShadowCaster,
+    ));
+
+    // ocean
+    let ocean_height = 0.0;
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::new(
+            Vec3::Y,
+            Vec2::new(TERRAIN_SIZE / 2.0, TERRAIN_SIZE / 2.0),
+        ))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: water_color,
+            perceptual_roughness: 0.8,
+            ..default()
+        })),
+        Transform::from_translation(Vec3::new(0.0, ocean_height, 0.0)),
         NotShadowCaster,
     ));
 
