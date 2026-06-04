@@ -61,7 +61,7 @@ pub fn setup_environment(
             color: sun_color,
             ..default()
         },
-        Transform::from_translation(Vec3::new(3.0, 4.0, 2.0) * 1000.0)
+        Transform::from_translation(Vec3::new(1.0, 2.0, -1.0) * 1000.0)
             .looking_at(Vec3::ZERO, Vec3::Y),
         CascadeShadowConfigBuilder {
             maximum_distance: 400.0,

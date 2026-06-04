@@ -8,7 +8,7 @@ use std::{
 use bevy::prelude::*;
 use fastapprox::fast;
 use fastrand::Rng;
-use image::ColorType;
+use image::{ImageBuffer, Luma, Rgb, imageops};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
 use crate::inventory::{Item, ItemStack};
@@ -411,59 +411,51 @@ impl WorldGen {
             (f - min) / (max - min)
         }
 
-        image::save_buffer(
-            path.join("height.png"),
+        let height_img = ImageBuffer::<Luma<u8>, Vec<_>>::from_raw(
+            TERRAIN_N as u32,
+            TERRAIN_N as u32,
             self.height
                 .iter()
                 .map(|f| (normalize_float(*f, min_height, max_height) * 255.0) as u8)
-                .collect::<Vec<u8>>()
-                .as_slice(),
-            TERRAIN_N as u32,
-            TERRAIN_N as u32,
-            ColorType::L8,
+                .collect(),
         )
         .unwrap();
+        imageops::flip_vertical(&height_img)
+            .save(path.join("height.png"))
+            .unwrap();
 
         // normal
-        image::save_buffer(
-            path.join("normal.png"),
+        let normal_img = ImageBuffer::<Rgb<u8>, Vec<_>>::from_raw(
+            TERRAIN_N as u32,
+            TERRAIN_N as u32,
             self.normal
                 .iter()
-                .flat_map(|v| {
-                    [
-                        (v.x * 255.0) as u8,
-                        (v.y * 255.0) as u8,
-                        (v.z * 255.0) as u8,
-                    ]
-                })
-                .collect::<Vec<u8>>()
-                .as_slice(),
-            TERRAIN_N as u32,
-            TERRAIN_N as u32,
-            ColorType::Rgb8,
+                .flat_map(|v| v.to_array().map(|f| (f * 255.0) as u8))
+                .collect(),
         )
         .unwrap();
+        imageops::flip_vertical(&normal_img)
+            .save(path.join("normal.png"))
+            .unwrap();
 
         // ground
-        image::save_buffer(
-            path.join("ground.png"),
+        let ground_img = ImageBuffer::<Rgb<u8>, Vec<_>>::from_raw(
+            TERRAIN_N as u32,
+            TERRAIN_N as u32,
             self.ground
                 .iter()
                 .flat_map(|g| {
-                    let color = g.color();
-                    [
-                        (color.to_srgba().red * 255.0) as u8,
-                        (color.to_srgba().green * 255.0) as u8,
-                        (color.to_srgba().blue * 255.0) as u8,
-                    ]
+                    g.color()
+                        .to_srgba()
+                        .to_f32_array_no_alpha()
+                        .map(|f| (f * 255.0) as u8)
                 })
-                .collect::<Vec<u8>>()
-                .as_slice(),
-            TERRAIN_N as u32,
-            TERRAIN_N as u32,
-            ColorType::Rgb8,
+                .collect(),
         )
         .unwrap();
+        imageops::flip_vertical(&ground_img)
+            .save(path.join("ground.png"))
+            .unwrap();
 
         // nodes
         fn pos_to_index(pos: Vec3) -> usize {
@@ -491,30 +483,24 @@ impl WorldGen {
                 Color::srgb(0.871, 0.871, 0.871).to_srgba().to_vec3();
         }
 
-        image::save_buffer(
-            path.join("nodes.png"),
+        let nodes_img = ImageBuffer::<Rgb<u8>, Vec<_>>::from_raw(
+            TERRAIN_N as u32,
+            TERRAIN_N as u32,
             nodes
                 .iter()
-                .flat_map(|v| {
-                    [
-                        (v.x * 255.0) as u8,
-                        (v.y * 255.0) as u8,
-                        (v.z * 255.0) as u8,
-                    ]
-                })
-                .collect::<Vec<u8>>()
-                .as_slice(),
-            TERRAIN_N as u32,
-            TERRAIN_N as u32,
-            ColorType::Rgb8,
+                .flat_map(|v| v.to_array().map(|f| (f * 255.0) as u8))
+                .collect(),
         )
         .unwrap();
+        imageops::flip_vertical(&nodes_img)
+            .save(path.join("nodes.png"))
+            .unwrap();
 
         // relief
         let mut relief = vec![Vec3::ZERO; TERRAIN_N * TERRAIN_N];
         for i in 0..relief.len() {
             let normal = self.normal[i].normalize();
-            let light_dir = Vec3::new(-1.0, 1.0, -1.0).normalize(); // from ground to light
+            let light_dir = Vec3::new(1.0, 1.0, -1.0).normalize(); // from ground to light (points to top left)
             let diffuse = normal.dot(light_dir) / 2.0 + 0.5; // [0, 1]
 
             let height = self.height[i];
@@ -538,24 +524,18 @@ impl WorldGen {
             relief[i] = base_col * diffuse * (height_normalized + 0.25 / 1.25);
         }
 
-        image::save_buffer(
-            path.join("relief.png"),
+        let relief_img = ImageBuffer::<Rgb<u8>, Vec<_>>::from_raw(
+            TERRAIN_N as u32,
+            TERRAIN_N as u32,
             relief
                 .iter()
-                .flat_map(|v| {
-                    [
-                        (v.x * 255.0) as u8,
-                        (v.y * 255.0) as u8,
-                        (v.z * 255.0) as u8,
-                    ]
-                })
-                .collect::<Vec<u8>>()
-                .as_slice(),
-            TERRAIN_N as u32,
-            TERRAIN_N as u32,
-            ColorType::Rgb8,
+                .flat_map(|v| v.to_array().map(|f| (f * 255.0) as u8))
+                .collect(),
         )
         .unwrap();
+        imageops::flip_vertical(&relief_img)
+            .save(path.join("relief.png"))
+            .unwrap();
 
         let t1 = Instant::now();
         println!("done, {:.2}s", (t1 - t0).as_secs_f32());
