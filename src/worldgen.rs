@@ -121,7 +121,7 @@ impl Ground {
             Ground::Sand => Color::srgb(0.906, 0.937, 0.447),
             Ground::Grass => Color::srgb(0.098, 0.718, 0.18),
             Ground::Dirt => Color::srgb(0.584, 0.361, 0.102),
-            Ground::Stone => Color::srgb(0.498, 0.612, 0.702),
+            Ground::Stone => Color::srgb(0.608, 0.639, 0.663),
         }
     }
 }
@@ -401,8 +401,8 @@ impl WorldGen {
         println!("dumping worldgen data to {}", path.display());
 
         // height
-        let min_height = 0.0;
-        let max_height = 200.0;
+        let min_height = self.height.iter().copied().reduce(f32::min).unwrap_or(0.0);
+        let max_height = self.height.iter().copied().reduce(f32::max).unwrap_or(1.0);
 
         fn normalize_float(f: f32, min: f32, max: f32) -> f32 {
             if min == max {
@@ -477,9 +477,9 @@ impl WorldGen {
         let mut nodes = vec![Vec3::ZERO; TERRAIN_N * TERRAIN_N];
         for (transform, stack) in &self.ore_nodes {
             nodes[pos_to_index(transform.translation)] = match stack.item {
-                Item::Iron => Color::srgb(0., 0.718, 1.).to_srgba().to_vec3(),
+                Item::Iron => Color::srgb(0., 0.451, 1.).to_srgba().to_vec3(),
                 Item::Copper => Color::srgb(1., 0.2, 0.).to_srgba().to_vec3(),
-                _ => Color::srgb(0.133, 0.133, 0.133).to_srgba().to_vec3(),
+                _ => Color::srgb(0.204, 0.204, 0.204).to_srgba().to_vec3(),
             }
         }
         for (transform, _) in &self.tree_nodes {
@@ -488,12 +488,59 @@ impl WorldGen {
         }
         for (transform, _, _) in &self.rock_nodes {
             nodes[pos_to_index(transform.translation)] =
-                Color::srgb(0.718, 0.718, 0.718).to_srgba().to_vec3();
+                Color::srgb(0.871, 0.871, 0.871).to_srgba().to_vec3();
         }
 
         image::save_buffer(
             path.join("nodes.png"),
             nodes
+                .iter()
+                .flat_map(|v| {
+                    [
+                        (v.x * 255.0) as u8,
+                        (v.y * 255.0) as u8,
+                        (v.z * 255.0) as u8,
+                    ]
+                })
+                .collect::<Vec<u8>>()
+                .as_slice(),
+            TERRAIN_N as u32,
+            TERRAIN_N as u32,
+            ColorType::Rgb8,
+        )
+        .unwrap();
+
+        // relief
+        let mut relief = vec![Vec3::ZERO; TERRAIN_N * TERRAIN_N];
+        for i in 0..relief.len() {
+            let normal = self.normal[i].normalize();
+            let light_dir = Vec3::new(-1.0, 1.0, -1.0).normalize(); // from ground to light
+            let diffuse = normal.dot(light_dir) / 2.0 + 0.5; // [0, 1]
+
+            let height = self.height[i];
+            let height_normalized = normalize_float(height, min_height, max_height); // [0, 1]
+
+            let ground_col = self.ground[i].color().to_srgba().to_vec3();
+            let node_col = nodes[i];
+            let water_height = 0.0;
+            let water_col = Color::srgba(0.039, 0.161, 0.392, 0.8).to_srgba().to_vec4();
+
+            let base_col = match node_col {
+                Vec3::ZERO => {
+                    if height <= water_height {
+                        ground_col.lerp(water_col.xyz(), water_col.w)
+                    } else {
+                        ground_col
+                    }
+                }
+                _ => node_col,
+            };
+            relief[i] = base_col * diffuse * (height_normalized + 0.25 / 1.25);
+        }
+
+        image::save_buffer(
+            path.join("relief.png"),
+            relief
                 .iter()
                 .flat_map(|v| {
                     [
