@@ -42,9 +42,9 @@ impl Building {
 
     pub fn asset(&self) -> &str {
         match self {
-            Building::Miner => "miner.glb",
-            Building::Processor => "processor.glb",
-            Building::SatelliteDish => "satellite_dish.glb",
+            Building::Miner => "models/miner.glb",
+            Building::Processor => "models/processor.glb",
+            Building::SatelliteDish => "models/satellite_dish.glb",
         }
     }
 

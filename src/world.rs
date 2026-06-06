@@ -177,7 +177,7 @@ pub fn setup_world(
     let mut ore_batch = Vec::new();
     for (transform, stack) in &worldgen.ore_nodes {
         let ore_scene = asset_server.load::<Scene>(format!(
-            "node_{}.glb#Scene0",
+            "models/node_{}.glb#Scene0",
             format!("{}", stack.item).to_lowercase()
         ));
 
@@ -206,7 +206,7 @@ pub fn setup_world(
     // trees
     let mut tree_batch = Vec::new();
     for (transform, stack) in &worldgen.tree_nodes {
-        let tree_scene = asset_server.load::<Scene>("tree.glb#Scene0");
+        let tree_scene = asset_server.load::<Scene>("models/tree.glb#Scene0");
 
         tree_batch.push((
             ResourceNode::Tree,
@@ -233,7 +233,7 @@ pub fn setup_world(
     // rocks
     let mut rock_batch = Vec::new();
     for (transform, stack, variant) in &worldgen.rock_nodes {
-        let rock_scene = asset_server.load::<Scene>(format!("rock_{}.glb#Scene0", variant));
+        let rock_scene = asset_server.load::<Scene>(format!("models/rock_{}.glb#Scene0", variant));
 
         rock_batch.push((
             ResourceNode::Rock,
@@ -270,7 +270,7 @@ pub fn update_world(
             match node {
                 ResourceNode::Tree => {
                     commands.spawn((
-                        SceneRoot(asset_server.load::<Scene>("stump.glb#Scene0")),
+                        SceneRoot(asset_server.load::<Scene>("models/stump.glb#Scene0")),
                         *transform,
                         VisibleDistance(1.0),
                         Visibility::Visible,

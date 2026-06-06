@@ -202,6 +202,7 @@ pub fn show_map_menu(
                 ..default()
             },
             ZIndex(-2),
+            BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 1.)),
         ))
         .id();
 
@@ -240,7 +241,7 @@ pub fn show_map_menu(
         ))
         .id();
 
-    let player_marker_image = asset_server.load::<Image>("player_marker.png");
+    let player_marker_image = asset_server.load::<Image>("textures/player_marker.png");
     let player_marker = commands
         .spawn((
             PlayerMarker,
