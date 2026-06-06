@@ -20,6 +20,7 @@ mod effects;
 mod environment;
 mod hud;
 mod inventory;
+mod map_menu;
 mod pause_menu;
 mod player;
 mod world;
@@ -32,6 +33,7 @@ pub enum GameState {
     PauseMenu,
     BuildMenu,
     BuildingMenu,
+    MapMenu,
 }
 
 fn cursor_grab(mut cursor_options: Single<&mut CursorOptions>) {
@@ -135,6 +137,7 @@ fn main() {
                     building_menu::building_menu_update,
                 )
                     .run_if(in_state(GameState::BuildingMenu)),
+                (map_menu::map_menu_interact).run_if(in_state(GameState::MapMenu)),
             ),
         )
         .add_systems(FixedUpdate, buildings::update_buildings)
@@ -179,6 +182,14 @@ fn main() {
                 building_menu::hide_building_menu,
                 hud::show_hud,
             ),
+        )
+        .add_systems(
+            OnEnter(GameState::MapMenu),
+            (cursor_ungrab, map_menu::show_map_menu, hud::hide_hud),
+        )
+        .add_systems(
+            OnExit(GameState::MapMenu),
+            (cursor_grab, map_menu::hide_map_menu, hud::show_hud),
         )
         .run();
 }

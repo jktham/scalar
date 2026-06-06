@@ -157,10 +157,10 @@ pub fn update_movement(
         movement -= front;
     }
 
-    const SPEED: f32 = 5.5;
+    const SPEED: f32 = 0.5;
     let mut speed = SPEED;
     if keyboard_input.pressed(controls.get(Action::Sprint)) {
-        speed *= 2.0;
+        speed *= 20.0;
     }
 
     // update player controller
@@ -348,14 +348,19 @@ pub fn update_interact(
         return;
     }
 
+    if held_building.0.is_some() {
+        player_status.progress = 0.0;
+        return; // if player is holding a building, don't interact with world
+    }
+
     if keyboard_input.just_pressed(controls.get(Action::Build)) && held_building.0.is_none() {
         next_state.set(GameState::BuildMenu);
         return;
     }
 
-    if held_building.0.is_some() {
-        player_status.progress = 0.0;
-        return; // if player is holding a building, don't interact with world
+    if keyboard_input.just_pressed(controls.get(Action::Map)) {
+        next_state.set(GameState::MapMenu);
+        return;
     }
 
     let closest_hit = get_closest_hit_entity(&camera_rayhits, vec![player.entity()], parent_query);

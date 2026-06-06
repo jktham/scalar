@@ -154,7 +154,7 @@ impl WorldGen {
         worldgen.generate_maps();
         worldgen.place_nodes();
 
-        worldgen.dump(std::path::Path::new("./output"));
+        worldgen.dump(std::path::Path::new("./assets/map"));
 
         worldgen
     }
@@ -404,6 +404,9 @@ impl WorldGen {
     pub fn dump(&self, path: &Path) {
         let t0 = Instant::now();
         println!("dumping worldgen data to {}", path.display());
+
+        // create dir if not exists
+        std::fs::create_dir_all(path).unwrap();
 
         // height
         let min_height = self.height.iter().copied().reduce(f32::min).unwrap_or(0.0);
