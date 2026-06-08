@@ -13,6 +13,8 @@ use crate::controls::Action;
 use crate::controls::Controls;
 use crate::effects::EffectMap;
 use crate::inventory::Item;
+use crate::unlocks::Unlock;
+use crate::unlocks::Unlocks;
 use crate::world::ResourceNode;
 use crate::world::Terrain;
 use crate::worldgen::WorldGen;
@@ -100,32 +102,35 @@ pub fn setup_player(
                 })
                 .collect(),
         },
+        Unlocks::default(),
         HeldBuilding(None),
         OpenBuilding(None),
         Money(0),
-        Transform::from_translation(spawn_pos),
-        RigidBody::Dynamic,
-        Collider::capsule(0.3, 2.0),
-        Friction::new(0.1),
-        TnuaController::<ControlScheme>::default(),
-        TnuaConfig::<ControlScheme>(control_scheme_configs.add(ControlSchemeConfig {
-            basis: TnuaBuiltinWalkConfig {
-                float_height: 1.5,
-                cling_distance: 0.0,
-                acceleration: 120.0,
-                air_acceleration: 60.0,
-                spring_strength: 200.0,
-                max_slope: f32::to_radians(60.0),
-                ..default()
-            },
-            jump: TnuaBuiltinJumpConfig {
-                height: 2.0,
-                ..default()
-            },
-        })),
-        TnuaAvian3dSensorShape(Collider::cylinder(0.2, 0.0)),
-        LockedAxes::ROTATION_LOCKED,
-        CollisionLayers::new(GameLayer::Player, [GameLayer::Terrain, GameLayer::Object]),
+        (
+            Transform::from_translation(spawn_pos),
+            RigidBody::Dynamic,
+            Collider::capsule(0.3, 2.0),
+            Friction::new(0.1),
+            TnuaController::<ControlScheme>::default(),
+            TnuaConfig::<ControlScheme>(control_scheme_configs.add(ControlSchemeConfig {
+                basis: TnuaBuiltinWalkConfig {
+                    float_height: 1.5,
+                    cling_distance: 0.0,
+                    acceleration: 120.0,
+                    air_acceleration: 60.0,
+                    spring_strength: 200.0,
+                    max_slope: f32::to_radians(60.0),
+                    ..default()
+                },
+                jump: TnuaBuiltinJumpConfig {
+                    height: 2.0,
+                    ..default()
+                },
+            })),
+            TnuaAvian3dSensorShape(Collider::cylinder(0.2, 0.0)),
+            LockedAxes::ROTATION_LOCKED,
+            CollisionLayers::new(GameLayer::Player, [GameLayer::Terrain, GameLayer::Object]),
+        ),
     ));
 }
 
@@ -335,6 +340,7 @@ pub fn update_interact(
     mut open_building: Single<&mut OpenBuilding, With<Player>>,
     mut player_status: Single<&mut PlayerMining, With<Player>>,
     mut inventory: Single<&mut Inventory, With<Player>>,
+    unlocks: Single<&Unlocks, With<Player>>,
     mut nodes: Query<(&ResourceNode, &mut ItemStack)>,
     mut buildings: Query<(&Building, Entity)>,
     parent_query: Query<&ChildOf>,
@@ -363,6 +369,11 @@ pub fn update_interact(
         return;
     }
 
+    if keyboard_input.just_pressed(controls.get(Action::Research)) {
+        next_state.set(GameState::ResearchMenu);
+        return;
+    }
+
     let closest_hit = get_closest_hit_entity(&camera_rayhits, vec![player.entity()], parent_query);
     if closest_hit.is_none() {
         player_status.progress = 0.0;
@@ -370,12 +381,18 @@ pub fn update_interact(
     }
     let (_hit, entity) = closest_hit.unwrap();
 
+    let mining_speed_modifier = if unlocks.0.contains(&Unlock::PlayerMineSpeed) {
+        2.0
+    } else {
+        1.0
+    };
+
     // mining progress
     if let Ok((_node, mut stack)) = nodes.get_mut(entity) // mine node
         && keyboard_input.pressed(controls.get(Action::Primary))
         && stack.count > 0
     {
-        player_status.progress += time.delta_secs() * player_status.speed;
+        player_status.progress += time.delta_secs() * player_status.speed * mining_speed_modifier;
         if player_status.progress >= 1.0 {
             let amount = i32::min(stack.count, player_status.progress.floor() as i32);
             stack.count -= amount;

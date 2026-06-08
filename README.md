@@ -17,7 +17,7 @@
     - [x] fuel consumption
     - [ ] power/data wires
     - [ ] drones
-    - [ ] research
+    - [x] research
     - [ ] figure out gameplay loop
     - [ ] balancing
 
@@ -56,9 +56,9 @@
         - [ ] settings
         - [x] build
         - [x] building
-        - [ ] research
+        - [x] research
         - [ ] stats
-        - [ ] map
+        - [x] map
     - [ ] pretty
         - [ ] hud
         - [ ] pause

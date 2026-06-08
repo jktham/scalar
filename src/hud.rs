@@ -66,8 +66,9 @@ pub fn setup_hud(mut commands: Commands, controls: Res<Controls>) {
     commands.spawn((
         ControlsText,
         Text::new(format!(
-            "[{}] Build\n[{}] Map",
+            "[{}] Build\n[{}] Research\n[{}] Map",
             controls.print(Action::Build),
+            controls.print(Action::Research),
             controls.print(Action::Map)
         )),
         TextFont {

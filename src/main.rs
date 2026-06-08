@@ -23,6 +23,8 @@ mod inventory;
 mod map_menu;
 mod pause_menu;
 mod player;
+mod research_menu;
+mod unlocks;
 mod world;
 mod worldgen;
 
@@ -34,6 +36,7 @@ pub enum GameState {
     BuildMenu,
     BuildingMenu,
     MapMenu,
+    ResearchMenu,
 }
 
 fn cursor_grab(mut cursor_options: Single<&mut CursorOptions>) {
@@ -138,6 +141,7 @@ fn main() {
                 )
                     .run_if(in_state(GameState::BuildingMenu)),
                 (map_menu::map_menu_interact).run_if(in_state(GameState::MapMenu)),
+                (research_menu::research_menu_interact).run_if(in_state(GameState::ResearchMenu)),
             ),
         )
         .add_systems(FixedUpdate, buildings::update_buildings)
@@ -190,6 +194,22 @@ fn main() {
         .add_systems(
             OnExit(GameState::MapMenu),
             (cursor_grab, map_menu::hide_map_menu, hud::show_hud),
+        )
+        .add_systems(
+            OnEnter(GameState::ResearchMenu),
+            (
+                cursor_ungrab,
+                research_menu::show_research_menu,
+                hud::hide_hud,
+            ),
+        )
+        .add_systems(
+            OnExit(GameState::ResearchMenu),
+            (
+                cursor_grab,
+                research_menu::hide_research_menu,
+                hud::show_hud,
+            ),
         )
         .run();
 }

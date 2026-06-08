@@ -17,6 +17,7 @@ pub enum Action {
     Pause,
     Build,
     Map,
+    Research,
 }
 
 #[derive(Resource)]
@@ -40,6 +41,7 @@ impl Default for Controls {
         map.insert(Action::Pause, KeyCode::Escape);
         map.insert(Action::Build, KeyCode::KeyB);
         map.insert(Action::Map, KeyCode::KeyM);
+        map.insert(Action::Research, KeyCode::KeyR);
 
         Self(map)
     }
