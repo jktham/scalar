@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[derive(Component)]
-pub struct MapMenu;
+pub struct Menu;
 
 #[derive(Component)]
 pub struct Map;
@@ -23,7 +23,7 @@ pub struct Map;
 #[derive(Component)]
 pub struct PlayerMarker;
 
-pub fn map_menu_interact(
+pub fn interact(
     interaction_query: Query<(&Interaction, &mut BackgroundColor), Changed<Interaction>>,
     mut map: Single<&mut Node, With<Map>>,
     mut player_marker: Single<(&mut Node, &mut UiTransform), (With<PlayerMarker>, Without<Map>)>,
@@ -149,14 +149,10 @@ pub fn map_menu_interact(
 #[derive(Component)]
 pub struct ExitButton;
 
-pub fn show_map_menu(
-    mut commands: Commands,
-    controls: Res<Controls>,
-    asset_server: Res<AssetServer>,
-) {
+pub fn show(mut commands: Commands, controls: Res<Controls>, asset_server: Res<AssetServer>) {
     let menu = commands
         .spawn((
-            MapMenu,
+            Menu,
             Node {
                 width: percent(100),
                 height: percent(100),
@@ -299,7 +295,7 @@ pub fn show_map_menu(
     commands.get_entity(menu).unwrap().add_child(exit_button);
 }
 
-pub fn hide_map_menu(mut commands: Commands, menu_entities: Query<Entity, With<MapMenu>>) {
+pub fn hide(mut commands: Commands, menu_entities: Query<Entity, With<Menu>>) {
     for e in menu_entities {
         commands.entity(e).despawn();
     }

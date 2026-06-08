@@ -11,7 +11,7 @@ use crate::buildings::RunningParticles;
 use crate::buildings::SatelliteDishStatic;
 use crate::controls::Action;
 use crate::controls::Controls;
-use crate::effects::EffectMap;
+use crate::effects::Effects;
 use crate::inventory::Item;
 use crate::unlocks::Unlock;
 use crate::unlocks::Unlocks;
@@ -246,7 +246,7 @@ fn get_closest_hit_entity(
     Some((hit, entity))
 }
 
-pub fn update_hover_target(
+pub fn update_target_text(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
     mut target_text: Single<&mut Text, With<TargetText>>,
@@ -275,7 +275,7 @@ pub fn update_hover_target(
     }
 }
 
-pub fn update_hover_action(
+pub fn update_action_text(
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
     player_status: Single<&PlayerMining, With<Player>>,
@@ -332,7 +332,7 @@ pub fn update_hover_action(
 /// Building ui currently opened
 pub struct OpenBuilding(pub Option<Entity>);
 
-pub fn update_interact(
+pub fn interact(
     mut commands: Commands,
     camera_rayhits: Single<&RayHits, With<Camera>>,
     player: Single<Entity, With<Player>>,
@@ -444,7 +444,7 @@ pub fn place_held_building(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     worldgen: Res<WorldGen>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
-    effect_map: Res<EffectMap>,
+    effect_map: Res<Effects>,
     controls: Res<Controls>,
 ) {
     if held_building.0.is_none() {

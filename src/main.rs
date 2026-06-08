@@ -12,18 +12,14 @@ use bevy_hanabi::prelude::*;
 use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 
-mod build_menu;
-mod building_menu;
 mod buildings;
 mod controls;
 mod effects;
 mod environment;
 mod hud;
 mod inventory;
-mod map_menu;
-mod pause_menu;
+mod menus;
 mod player;
-mod research_menu;
 mod unlocks;
 mod world;
 mod worldgen;
@@ -101,7 +97,7 @@ fn main() {
         ))
         .init_state::<GameState>()
         .insert_resource(worldgen::WorldGen::generate())
-        .insert_resource(effects::EffectMap::default())
+        .insert_resource(effects::Effects::default())
         .insert_resource(controls::Controls::default())
         .add_systems(
             Startup,
@@ -119,9 +115,9 @@ fn main() {
             (
                 (
                     player::update_movement.in_set(TnuaUserControlsSystems),
-                    player::update_hover_target,
-                    player::update_hover_action,
-                    player::update_interact,
+                    player::update_target_text,
+                    player::update_action_text,
+                    player::interact,
                     player::place_held_building,
                     world::cull_visibility.run_if(on_timer(Duration::from_secs_f32(1.0))),
                     world::insert_colliders.run_if(on_timer(Duration::from_secs_f32(1.0))),
@@ -132,84 +128,55 @@ fn main() {
                 hud::update_money,
                 buildings::update_building_animations,
                 buildings::update_building_effects,
-                world::update_world,
-                (pause_menu::pause_menu_interact).run_if(in_state(GameState::PauseMenu)),
-                (build_menu::build_menu_interact).run_if(in_state(GameState::BuildMenu)),
-                (
-                    building_menu::building_menu_interact,
-                    building_menu::building_menu_update,
-                )
+                world::remove_depleted_nodes,
+                (menus::pause::interact).run_if(in_state(GameState::PauseMenu)),
+                (menus::build::interact).run_if(in_state(GameState::BuildMenu)),
+                (menus::building::interact, menus::building::update)
                     .run_if(in_state(GameState::BuildingMenu)),
-                (map_menu::map_menu_interact).run_if(in_state(GameState::MapMenu)),
-                (research_menu::research_menu_interact).run_if(in_state(GameState::ResearchMenu)),
+                (menus::map::interact).run_if(in_state(GameState::MapMenu)),
+                (menus::research::interact).run_if(in_state(GameState::ResearchMenu)),
             ),
         )
         .add_systems(FixedUpdate, buildings::update_buildings)
         .add_systems(
             OnEnter(GameState::PauseMenu),
-            (
-                pause_time,
-                cursor_ungrab,
-                pause_menu::show_pause_menu,
-                hud::hide_hud,
-            ),
+            (pause_time, cursor_ungrab, menus::pause::show, hud::hide_hud),
         )
         .add_systems(
             OnExit(GameState::PauseMenu),
-            (
-                unpause_time,
-                cursor_grab,
-                pause_menu::hide_pause_menu,
-                hud::show_hud,
-            ),
+            (unpause_time, cursor_grab, menus::pause::hide, hud::show_hud),
         )
         .add_systems(
             OnEnter(GameState::BuildMenu),
-            (cursor_ungrab, build_menu::show_build_menu, hud::hide_hud),
+            (cursor_ungrab, menus::build::show, hud::hide_hud),
         )
         .add_systems(
             OnExit(GameState::BuildMenu),
-            (cursor_grab, build_menu::hide_build_menu, hud::show_hud),
+            (cursor_grab, menus::build::hide, hud::show_hud),
         )
         .add_systems(
             OnEnter(GameState::BuildingMenu),
-            (
-                cursor_ungrab,
-                building_menu::show_building_menu,
-                hud::hide_hud,
-            ),
+            (cursor_ungrab, menus::building::show, hud::hide_hud),
         )
         .add_systems(
             OnExit(GameState::BuildingMenu),
-            (
-                cursor_grab,
-                building_menu::hide_building_menu,
-                hud::show_hud,
-            ),
+            (cursor_grab, menus::building::hide, hud::show_hud),
         )
         .add_systems(
             OnEnter(GameState::MapMenu),
-            (cursor_ungrab, map_menu::show_map_menu, hud::hide_hud),
+            (cursor_ungrab, menus::map::show, hud::hide_hud),
         )
         .add_systems(
             OnExit(GameState::MapMenu),
-            (cursor_grab, map_menu::hide_map_menu, hud::show_hud),
+            (cursor_grab, menus::map::hide, hud::show_hud),
         )
         .add_systems(
             OnEnter(GameState::ResearchMenu),
-            (
-                cursor_ungrab,
-                research_menu::show_research_menu,
-                hud::hide_hud,
-            ),
+            (cursor_ungrab, menus::research::show, hud::hide_hud),
         )
         .add_systems(
             OnExit(GameState::ResearchMenu),
-            (
-                cursor_grab,
-                research_menu::hide_research_menu,
-                hud::show_hud,
-            ),
+            (cursor_grab, menus::research::hide, hud::show_hud),
         )
         .run();
 }

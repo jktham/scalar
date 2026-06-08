@@ -64,6 +64,7 @@ pub fn setup_hud(mut commands: Commands, controls: Res<Controls>) {
     ));
 
     commands.spawn((
+        HideInMenus,
         ControlsText,
         Text::new(format!(
             "[{}] Build\n[{}] Research\n[{}] Map",

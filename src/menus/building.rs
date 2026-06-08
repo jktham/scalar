@@ -9,9 +9,9 @@ use crate::{
 };
 
 #[derive(Component)]
-pub struct BuildingMenu;
+pub struct Menu;
 
-pub fn building_menu_interact(
+pub fn interact(
     collect_button: Option<Single<&Interaction, With<CollectButton>>>,
     add_fuel_button: Option<Single<&Interaction, With<AddFuelButton>>>,
     exit_button: Single<&Interaction, With<ExitButton>>,
@@ -89,7 +89,7 @@ pub fn building_menu_interact(
     }
 }
 
-pub fn get_info_text(
+fn get_info_text(
     processing: &Option<&Processing>,
     output_slot: &Option<&OutputSlot>,
     fuel_slot: &Option<&FuelSlot>,
@@ -123,7 +123,7 @@ pub fn get_info_text(
     .join("")
 }
 
-pub fn building_menu_update(
+pub fn update(
     buildings: Query<(
         &Building,
         Option<&Processing>,
@@ -163,7 +163,7 @@ pub struct ExitButton;
 #[derive(Component)]
 pub struct InfoText;
 
-pub fn show_building_menu(
+pub fn show(
     mut commands: Commands,
     buildings: Query<(
         &Building,
@@ -252,7 +252,7 @@ pub fn show_building_menu(
 
     let menu = commands
         .spawn((
-            BuildingMenu,
+            Menu,
             Node {
                 width: percent(100),
                 height: percent(100),
@@ -336,10 +336,7 @@ pub fn show_building_menu(
     commands.get_entity(menu).unwrap().add_child(exit_button);
 }
 
-pub fn hide_building_menu(
-    mut commands: Commands,
-    menu_entities: Query<Entity, With<BuildingMenu>>,
-) {
+pub fn hide(mut commands: Commands, menu_entities: Query<Entity, With<Menu>>) {
     for e in menu_entities {
         commands.entity(e).despawn();
     }

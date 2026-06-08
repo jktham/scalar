@@ -6,9 +6,9 @@ use crate::{
 };
 
 #[derive(Component)]
-pub struct PauseMenu;
+pub struct Menu;
 
-pub fn pause_menu_interact(
+pub fn interact(
     interaction_query: Query<(&Interaction, &mut BackgroundColor), Changed<Interaction>>,
     continue_button: Single<&Interaction, With<ContinueButton>>,
     settings_button: Single<&Interaction, With<SettingsButton>>,
@@ -56,9 +56,9 @@ pub struct SettingsButton;
 #[derive(Component)]
 pub struct QuitButton;
 
-pub fn show_pause_menu(mut commands: Commands) {
+pub fn show(mut commands: Commands) {
     commands.spawn((
-        PauseMenu,
+        Menu,
         Node {
             width: percent(100),
             height: percent(100),
@@ -152,7 +152,7 @@ pub fn show_pause_menu(mut commands: Commands) {
     ));
 }
 
-pub fn hide_pause_menu(mut commands: Commands, menu_entities: Query<Entity, With<PauseMenu>>) {
+pub fn hide(mut commands: Commands, menu_entities: Query<Entity, With<Menu>>) {
     for e in menu_entities {
         commands.entity(e).despawn();
     }

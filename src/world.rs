@@ -48,7 +48,7 @@ pub const CHUNK_SIZE_Z: f32 =
 pub const WORLD_SIZE_X: f32 = N_CHUNKS as f32 * CHUNK_SIZE_X;
 pub const WORLD_SIZE_Z: f32 = N_CHUNKS as f32 * CHUNK_SIZE_Z;
 
-pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut Rng) -> Mesh {
+fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut Rng) -> Mesh {
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
@@ -125,7 +125,7 @@ pub fn generate_chunk_mesh(cx: f32, cz: f32, worldgen: &Res<WorldGen>, rng: &mut
 }
 
 /// mesh and chunk pos
-pub fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>, rng: &mut Rng) -> Vec<(Mesh, Vec3)> {
+fn generate_terrain_chunk_meshes(worldgen: &Res<WorldGen>, rng: &mut Rng) -> Vec<(Mesh, Vec3)> {
     let mut chunks = Vec::new();
     for icx in 0..N_CHUNKS {
         for icz in 0..N_CHUNKS {
@@ -258,7 +258,7 @@ pub fn setup_world(
     commands.spawn_batch(rock_batch);
 }
 
-pub fn update_world(
+pub fn remove_depleted_nodes(
     mut commands: Commands,
     nodes: Query<(&ResourceNode, Entity, &Transform, &ItemStack)>,
     asset_server: Res<AssetServer>,

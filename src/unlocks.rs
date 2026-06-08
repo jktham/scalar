@@ -5,6 +5,7 @@ use strum_macros::EnumIter;
 use crate::inventory::{Item, ItemStack};
 
 #[derive(Component, Default)]
+/// set of unlocks the player has
 pub struct Unlocks(pub FxHashSet<Unlock>);
 
 #[derive(EnumIter, Clone, Copy, Hash, Eq, PartialEq)]

@@ -10,9 +10,9 @@ use crate::{
 };
 
 #[derive(Component)]
-pub struct BuildMenu;
+pub struct Menu;
 
-pub fn build_menu_interact(
+pub fn interact(
     interaction_query: Query<(&Interaction, &mut BackgroundColor), Changed<Interaction>>,
     build_buttons: Query<(&Interaction, &BuildButton)>,
     exit_button: Single<&Interaction, With<ExitButton>>,
@@ -75,7 +75,7 @@ pub struct BuildButton(pub Building);
 #[derive(Component)]
 pub struct ExitButton;
 
-pub fn show_build_menu(
+pub fn show(
     mut commands: Commands,
     inventory: Single<&Inventory, With<Player>>,
     controls: Res<Controls>,
@@ -148,7 +148,7 @@ pub fn show_build_menu(
 
     let menu = commands
         .spawn((
-            BuildMenu,
+            Menu,
             Node {
                 width: percent(100),
                 height: percent(100),
@@ -227,7 +227,7 @@ pub fn show_build_menu(
     commands.get_entity(menu).unwrap().add_child(exit_button);
 }
 
-pub fn hide_build_menu(mut commands: Commands, menu_entities: Query<Entity, With<BuildMenu>>) {
+pub fn hide(mut commands: Commands, menu_entities: Query<Entity, With<Menu>>) {
     for e in menu_entities {
         commands.entity(e).despawn();
     }

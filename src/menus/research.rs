@@ -10,9 +10,9 @@ use crate::{
 };
 
 #[derive(Component)]
-pub struct ResearchMenu;
+pub struct Menu;
 
-pub fn research_menu_interact(
+pub fn interact(
     interaction_query: Query<(&Interaction, &mut BackgroundColor), Changed<Interaction>>,
     unlock_buttons: Query<(&Interaction, &UnlockButton)>,
     exit_button: Single<&Interaction, With<ExitButton>>,
@@ -82,7 +82,7 @@ pub struct UnlockButton(pub Unlock);
 #[derive(Component)]
 pub struct ExitButton;
 
-pub fn show_research_menu(
+pub fn show(
     mut commands: Commands,
     inventory: Single<&Inventory, With<Player>>,
     money: Single<&Money, With<Player>>,
@@ -172,7 +172,7 @@ pub fn show_research_menu(
 
     let menu = commands
         .spawn((
-            ResearchMenu,
+            Menu,
             Node {
                 width: percent(100),
                 height: percent(100),
@@ -251,10 +251,7 @@ pub fn show_research_menu(
     commands.get_entity(menu).unwrap().add_child(exit_button);
 }
 
-pub fn hide_research_menu(
-    mut commands: Commands,
-    menu_entities: Query<Entity, With<ResearchMenu>>,
-) {
+pub fn hide(mut commands: Commands, menu_entities: Query<Entity, With<Menu>>) {
     for e in menu_entities {
         commands.entity(e).despawn();
     }

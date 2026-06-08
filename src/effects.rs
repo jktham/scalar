@@ -6,11 +6,11 @@ use bevy_hanabi::{
 use fxhash::FxHashMap;
 
 #[derive(Resource, Default)]
-pub struct EffectMap(pub FxHashMap<String, Handle<EffectAsset>>);
+pub struct Effects(pub FxHashMap<String, Handle<EffectAsset>>);
 
 pub fn create_smoke_effect(
     mut effects: ResMut<Assets<EffectAsset>>,
-    mut effect_map: ResMut<EffectMap>,
+    mut effect_map: ResMut<Effects>,
 ) {
     let mut gradient = Gradient::new();
     gradient.add_key(0.0, Vec4::new(0.0, 0.0, 0.0, 0.8));
