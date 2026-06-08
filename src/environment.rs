@@ -1,8 +1,6 @@
 use avian3d::spatial_query::{RayCaster, RayHits, SpatialQueryFilter};
 use bevy::{
-    anti_alias::taa::TemporalAntiAliasing,
     light::{CascadeShadowConfigBuilder, NotShadowCaster},
-    pbr::ScreenSpaceAmbientOcclusion,
     prelude::*,
 };
 
@@ -15,7 +13,6 @@ pub fn setup_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    // asset_server: Res<AssetServer>,
 ) {
     let sky_color = Color::srgb(0.35, 0.48, 0.66);
     let sun_color = Color::srgb(0.98, 0.95, 0.82);
@@ -77,10 +74,9 @@ pub fn setup_environment(
             fov: 80.0_f32.to_radians(),
             ..default()
         }),
-        // NoIndirectDrawing,
-        ScreenSpaceAmbientOcclusion::default(),
-        Msaa::Off,
-        TemporalAntiAliasing::default(),
+        // ScreenSpaceAmbientOcclusion::default(),
+        // Msaa::Off,
+        // TemporalAntiAliasing::default(),
         Transform::from_xyz(0.0, 0.0, 0.0).looking_to(Vec3::new(1.0, 0.0, 0.0), Vec3::Y),
         RayCaster::new(Vec3::ZERO, -Dir3::Z)
             .with_max_distance(player::RANGE)
