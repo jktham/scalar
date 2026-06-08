@@ -1,13 +1,17 @@
 use core::fmt;
 
+use avian3d::collision::collider::{
+    ColliderConstructor, ColliderConstructorHierarchy, CollisionLayers,
+};
 use bevy::prelude::*;
-use bevy_hanabi::EffectSpawner;
+use bevy_hanabi::{EffectSpawner, ParticleEffect};
 use fastrand::Rng;
 use strum_macros::EnumIter;
 
 use crate::{
+    effects::Effects,
     inventory::{Item, ItemStack},
-    player::{Money, Player},
+    player::{GameLayer, Money, Player},
     world::ResourceNode,
 };
 
@@ -104,7 +108,157 @@ impl Building {
 
 #[derive(Component)]
 /// node the miner is attached to
-pub struct MiningNode(pub Entity);
+pub struct MinedNode(pub Entity);
+
+#[derive(Message)]
+pub struct BuildingPlacedMessage(pub Building, pub Transform, pub Option<Entity>);
+
+pub fn place_building(
+    mut commands: Commands,
+    nodes: Query<&ItemStack, With<ResourceNode>>,
+    asset_server: Res<AssetServer>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    effect_map: Res<Effects>,
+    mut building_placed_reader: MessageReader<BuildingPlacedMessage>,
+) {
+    for BuildingPlacedMessage(building, transform, related) in building_placed_reader.read() {
+        match building {
+            Building::Miner => {
+                if related.is_none() {
+                    println!("invalid miner placement, no node entity");
+                    continue;
+                }
+                let node = related.unwrap();
+                let stack = nodes.get(node).ok().unwrap();
+
+                let (graph, index) = AnimationGraph::from_clip(
+                    asset_server.load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
+                );
+                let graph_handle = graphs.add(graph);
+                let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
+
+                commands.spawn((
+                    Building::Miner,
+                    MinerStatic,
+                    Processing {
+                        status: ProcessingStatus::Idle,
+                        speed: 0.5,
+                        consumption: 100.0,
+                        ..default()
+                    },
+                    MinedNode(node),
+                    OutputSlot {
+                        stack: ItemStack {
+                            item: stack.item,
+                            count: 0,
+                        },
+                        limit: 100,
+                    },
+                    FuelSlot {
+                        stack: ItemStack {
+                            item: Item::Coal,
+                            count: 0,
+                        },
+                        limit: 100,
+                    },
+                    SceneRoot(asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0")),
+                    *transform,
+                    ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                        .with_default_layers(CollisionLayers::new(
+                            GameLayer::Object,
+                            [GameLayer::Player],
+                        )),
+                    RunningAnimation(graph_handle, index),
+                    children![(
+                        RunningParticles,
+                        ParticleEffect::new(smoke_handle),
+                        Transform::from_translation(Vec3::new(0.0, 3.6, 0.0))
+                    )],
+                ));
+            }
+            Building::Processor => {
+                let (graph, index) = AnimationGraph::from_clip(
+                    asset_server.load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
+                );
+                let graph_handle = graphs.add(graph);
+                let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
+
+                commands.spawn((
+                    Building::Processor,
+                    ProcessorStatic,
+                    Processing {
+                        status: ProcessingStatus::Idle,
+                        speed: 100.0,
+                        consumption: 1000.0,
+                        ..default()
+                    },
+                    FuelSlot {
+                        stack: ItemStack {
+                            item: Item::Coal,
+                            count: 0,
+                        },
+                        limit: 100,
+                    },
+                    ImageData {
+                        count: 0,
+                        limit: 1000,
+                    },
+                    SceneRoot(asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0")),
+                    *transform,
+                    ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                        .with_default_layers(CollisionLayers::new(
+                            GameLayer::Object,
+                            [GameLayer::Player],
+                        )),
+                    RunningAnimation(graph_handle, index),
+                    children![(
+                        RunningParticles,
+                        ParticleEffect::new(smoke_handle),
+                        Transform::from_translation(Vec3::new(0.0, 3.0, 0.0))
+                    )],
+                ));
+            }
+            Building::SatelliteDish => {
+                let (graph, index) = AnimationGraph::from_clip(
+                    asset_server.load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
+                );
+                let graph_handle = graphs.add(graph);
+                let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
+
+                commands.spawn((
+                    Building::SatelliteDish,
+                    SatelliteDishStatic,
+                    Processing {
+                        status: ProcessingStatus::Idle,
+                        speed: 100.0,
+                        consumption: 100.0,
+                        ..default()
+                    },
+                    FuelSlot {
+                        stack: ItemStack {
+                            item: Item::Coal,
+                            count: 0,
+                        },
+                        limit: 100,
+                    },
+                    SceneRoot(asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0")),
+                    *transform,
+                    ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
+                        .with_default_layers(CollisionLayers::new(
+                            GameLayer::Object,
+                            [GameLayer::Player],
+                        )),
+                    RunningAnimation(graph_handle, index),
+                    children![(
+                        RunningParticles,
+                        ParticleEffect::new(smoke_handle),
+                        Transform::from_translation(Vec3::new(0.0, 3.0, 0.0))
+                    )],
+                ));
+            }
+        }
+    }
+}
 
 #[derive(Debug, Default)]
 pub enum ProcessingStatus {
@@ -161,7 +315,7 @@ pub struct ImageData {
 /// update processing state and function of each type of building
 pub fn update_buildings(
     mut miners: Query<
-        (&mut Processing, &mut OutputSlot, &mut FuelSlot, &MiningNode),
+        (&mut Processing, &mut OutputSlot, &mut FuelSlot, &MinedNode),
         With<MinerStatic>,
     >,
     mut nodes: Query<(&ResourceNode, &mut ItemStack), Without<Building>>,

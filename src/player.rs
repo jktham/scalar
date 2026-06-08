@@ -1,17 +1,8 @@
 use crate::GameState;
-use crate::buildings::FuelSlot;
-use crate::buildings::ImageData;
-use crate::buildings::MinerStatic;
-use crate::buildings::MiningNode;
+use crate::buildings::BuildingPlacedMessage;
 use crate::buildings::OutputSlot;
-use crate::buildings::ProcessingStatus;
-use crate::buildings::ProcessorStatic;
-use crate::buildings::RunningAnimation;
-use crate::buildings::RunningParticles;
-use crate::buildings::SatelliteDishStatic;
 use crate::controls::Action;
 use crate::controls::Controls;
-use crate::effects::Effects;
 use crate::inventory::Item;
 use crate::unlocks::Unlock;
 use crate::unlocks::Unlocks;
@@ -23,8 +14,6 @@ use crate::{
     hud::{ActionText, TargetText},
     inventory::{Inventory, ItemStack},
 };
-use avian3d::collision::collider::ColliderConstructor;
-use avian3d::collision::collider::ColliderConstructorHierarchy;
 use avian3d::collision::collider::CollisionLayers;
 use avian3d::dynamics::rigid_body::Friction;
 use avian3d::prelude::PhysicsLayer;
@@ -46,7 +35,6 @@ use bevy::{
     math::{Quat, Vec3},
     transform::components::Transform,
 };
-use bevy_hanabi::ParticleEffect;
 use bevy_tnua::{
     TnuaConfig, TnuaController, TnuaScheme,
     builtins::{TnuaBuiltinJump, TnuaBuiltinJumpConfig, TnuaBuiltinWalk, TnuaBuiltinWalkConfig},
@@ -430,7 +418,6 @@ pub fn interact(
 pub struct HeldBuilding(pub Option<Building>);
 
 pub fn place_held_building(
-    mut commands: Commands,
     camera_rayhits: Single<&RayHits, With<Camera>>,
     camera_transform: Single<&Transform, With<Camera>>,
     player: Single<Entity, With<Player>>,
@@ -440,12 +427,10 @@ pub fn place_held_building(
     nodes: Query<(&ResourceNode, &Transform, &ItemStack)>,
     terrain: Query<&Terrain>,
     parent_query: Query<&ChildOf>,
-    asset_server: Res<AssetServer>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
     worldgen: Res<WorldGen>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
-    effect_map: Res<Effects>,
     controls: Res<Controls>,
+    mut building_placed_writer: MessageWriter<BuildingPlacedMessage>,
 ) {
     if held_building.0.is_none() {
         return; // not placing a building
@@ -478,7 +463,7 @@ pub fn place_held_building(
     match building {
         Building::Miner => {
             // only placeable on ore
-            if let Ok((node, transform, stack)) = nodes.get(entity)
+            if let Ok((node, transform, _stack)) = nodes.get(entity)
                 && let ResourceNode::Ore = node
             {
                 action_text.0 = format!(
@@ -488,52 +473,10 @@ pub fn place_held_building(
                     controls.print(Action::Cancel),
                 );
                 if keyboard_input.just_pressed(controls.get(Action::Primary)) {
-                    let (graph, index) = AnimationGraph::from_clip(
-                        asset_server
-                            .load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
-                    );
-                    let graph_handle = graphs.add(graph);
-                    let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
-
-                    commands.spawn((
+                    building_placed_writer.write(BuildingPlacedMessage(
                         Building::Miner,
-                        MinerStatic,
-                        Processing {
-                            status: ProcessingStatus::Idle,
-                            speed: 0.5,
-                            consumption: 100.0,
-                            ..default()
-                        },
-                        MiningNode(entity),
-                        OutputSlot {
-                            stack: ItemStack {
-                                item: stack.item,
-                                count: 0,
-                            },
-                            limit: 100,
-                        },
-                        FuelSlot {
-                            stack: ItemStack {
-                                item: Item::Coal,
-                                count: 0,
-                            },
-                            limit: 100,
-                        },
-                        SceneRoot(
-                            asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
-                        ),
                         *transform,
-                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
-                            .with_default_layers(CollisionLayers::new(
-                                GameLayer::Object,
-                                [GameLayer::Player],
-                            )),
-                        RunningAnimation(graph_handle, index),
-                        children![(
-                            RunningParticles,
-                            ParticleEffect::new(smoke_handle),
-                            Transform::from_translation(Vec3::new(0.0, 3.6, 0.0))
-                        )],
+                        Some(entity),
                     ));
                     held_building.0 = None;
                 }
@@ -550,13 +493,6 @@ pub fn place_held_building(
                 );
 
                 if keyboard_input.just_pressed(controls.get(Action::Primary)) {
-                    let (graph, index) = AnimationGraph::from_clip(
-                        asset_server
-                            .load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
-                    );
-                    let graph_handle = graphs.add(graph);
-                    let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
-
                     let pos =
                         camera_transform.translation + camera_transform.forward() * hit.distance;
                     let normal = worldgen.get_normal(pos.x, pos.z);
@@ -564,42 +500,12 @@ pub fn place_held_building(
                         normal.cross(Vec3::Y),
                         -f32::acos(normal.dot(Vec3::Y)),
                     );
+                    let transform = Transform::from_translation(pos).with_rotation(rot);
 
-                    commands.spawn((
+                    building_placed_writer.write(BuildingPlacedMessage(
                         Building::Processor,
-                        ProcessorStatic,
-                        Processing {
-                            status: ProcessingStatus::Idle,
-                            speed: 100.0,
-                            consumption: 1000.0,
-                            ..default()
-                        },
-                        FuelSlot {
-                            stack: ItemStack {
-                                item: Item::Coal,
-                                count: 0,
-                            },
-                            limit: 100,
-                        },
-                        ImageData {
-                            count: 0,
-                            limit: 1000,
-                        },
-                        SceneRoot(
-                            asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
-                        ),
-                        Transform::from_translation(pos).with_rotation(rot),
-                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
-                            .with_default_layers(CollisionLayers::new(
-                                GameLayer::Object,
-                                [GameLayer::Player],
-                            )),
-                        RunningAnimation(graph_handle, index),
-                        children![(
-                            RunningParticles,
-                            ParticleEffect::new(smoke_handle),
-                            Transform::from_translation(Vec3::new(0.0, 3.0, 0.0))
-                        )],
+                        transform,
+                        None,
                     ));
                     held_building.0 = None;
                 }
@@ -616,13 +522,6 @@ pub fn place_held_building(
                 );
 
                 if keyboard_input.just_pressed(controls.get(Action::Primary)) {
-                    let (graph, index) = AnimationGraph::from_clip(
-                        asset_server
-                            .load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
-                    );
-                    let graph_handle = graphs.add(graph);
-                    let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
-
                     let pos =
                         camera_transform.translation + camera_transform.forward() * hit.distance;
                     let normal = worldgen.get_normal(pos.x, pos.z);
@@ -630,38 +529,12 @@ pub fn place_held_building(
                         normal.cross(Vec3::Y),
                         -f32::acos(normal.dot(Vec3::Y)),
                     );
+                    let transform = Transform::from_translation(pos).with_rotation(rot);
 
-                    commands.spawn((
+                    building_placed_writer.write(BuildingPlacedMessage(
                         Building::SatelliteDish,
-                        SatelliteDishStatic,
-                        Processing {
-                            status: ProcessingStatus::Idle,
-                            speed: 100.0,
-                            consumption: 100.0,
-                            ..default()
-                        },
-                        FuelSlot {
-                            stack: ItemStack {
-                                item: Item::Coal,
-                                count: 0,
-                            },
-                            limit: 100,
-                        },
-                        SceneRoot(
-                            asset_server.load::<Scene>(building.asset().to_owned() + "#Scene0"),
-                        ),
-                        Transform::from_translation(pos).with_rotation(rot),
-                        ColliderConstructorHierarchy::new(ColliderConstructor::TrimeshFromMesh)
-                            .with_default_layers(CollisionLayers::new(
-                                GameLayer::Object,
-                                [GameLayer::Player],
-                            )),
-                        RunningAnimation(graph_handle, index),
-                        children![(
-                            RunningParticles,
-                            ParticleEffect::new(smoke_handle),
-                            Transform::from_translation(Vec3::new(0.0, 3.0, 0.0))
-                        )],
+                        transform,
+                        None,
                     ));
                     held_building.0 = None;
                 }

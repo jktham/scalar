@@ -12,6 +12,8 @@ use bevy_hanabi::prelude::*;
 use bevy_tnua::{TnuaControllerPlugin, TnuaUserControlsSystems};
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 
+use crate::buildings::BuildingPlacedMessage;
+
 mod buildings;
 mod controls;
 mod effects;
@@ -99,6 +101,7 @@ fn main() {
         .insert_resource(worldgen::WorldGen::generate())
         .insert_resource(effects::Effects::default())
         .insert_resource(controls::Controls::default())
+        .add_message::<BuildingPlacedMessage>()
         .add_systems(
             Startup,
             (
@@ -119,6 +122,7 @@ fn main() {
                     player::update_action_text,
                     player::interact,
                     player::place_held_building,
+                    buildings::place_building,
                     world::cull_visibility.run_if(on_timer(Duration::from_secs_f32(1.0))),
                     world::insert_colliders.run_if(on_timer(Duration::from_secs_f32(1.0))),
                 )
