@@ -9,7 +9,7 @@ use fastrand::Rng;
 use strum_macros::EnumIter;
 
 use crate::{
-    effects::Effects,
+    effects::EffectMap,
     inventory::{Item, ItemStack},
     player::{GameLayer, Money, Player},
     world::ResourceNode,
@@ -118,7 +118,7 @@ pub fn place_building(
     nodes: Query<&ItemStack, With<ResourceNode>>,
     asset_server: Res<AssetServer>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
-    effect_map: Res<Effects>,
+    effect_map: Res<EffectMap>,
     mut building_placed_reader: MessageReader<BuildingPlacedMessage>,
 ) {
     for BuildingPlacedMessage(building, transform, related) in building_placed_reader.read() {
@@ -131,11 +131,14 @@ pub fn place_building(
                 let node = related.unwrap();
                 let stack = nodes.get(node).ok().unwrap();
 
-                let (graph, index) = AnimationGraph::from_clip(
+                let (graph, index) = AnimationGraph::from_clips(vec![
                     asset_server.load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
-                );
+                    asset_server.load::<AnimationClip>(building.asset().to_owned() + "#Animation1"),
+                ]);
                 let graph_handle = graphs.add(graph);
+
                 let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
+                let sparks_handle = effect_map.0.get("sparks").unwrap().clone();
 
                 commands.spawn((
                     Building::Miner,
@@ -169,18 +172,21 @@ pub fn place_building(
                             [GameLayer::Player],
                         )),
                     RunningAnimation(graph_handle, index),
-                    children![(
-                        RunningParticles,
-                        ParticleEffect::new(smoke_handle),
-                        Transform::from_translation(Vec3::new(0.0, 3.6, 0.0))
-                    )],
+                    children![
+                        (
+                            RunningParticles,
+                            ParticleEffect::new(smoke_handle),
+                            Transform::from_translation(Vec3::new(0.0, 3.4, 0.0))
+                        ),
+                        (
+                            RunningParticles,
+                            ParticleEffect::new(sparks_handle),
+                            Transform::from_translation(Vec3::new(0.0, 0.3, 0.0))
+                        )
+                    ],
                 ));
             }
             Building::Processor => {
-                let (graph, index) = AnimationGraph::from_clip(
-                    asset_server.load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
-                );
-                let graph_handle = graphs.add(graph);
                 let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
 
                 commands.spawn((
@@ -210,7 +216,6 @@ pub fn place_building(
                             GameLayer::Object,
                             [GameLayer::Player],
                         )),
-                    RunningAnimation(graph_handle, index),
                     children![(
                         RunningParticles,
                         ParticleEffect::new(smoke_handle),
@@ -219,10 +224,6 @@ pub fn place_building(
                 ));
             }
             Building::SatelliteDish => {
-                let (graph, index) = AnimationGraph::from_clip(
-                    asset_server.load::<AnimationClip>(building.asset().to_owned() + "#Animation0"),
-                );
-                let graph_handle = graphs.add(graph);
                 let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
 
                 commands.spawn((
@@ -248,7 +249,6 @@ pub fn place_building(
                             GameLayer::Object,
                             [GameLayer::Player],
                         )),
-                    RunningAnimation(graph_handle, index),
                     children![(
                         RunningParticles,
                         ParticleEffect::new(smoke_handle),
@@ -497,7 +497,7 @@ pub fn update_buildings(
 
 #[derive(Component)]
 /// animation to play when building runs
-pub struct RunningAnimation(pub Handle<AnimationGraph>, pub AnimationNodeIndex);
+pub struct RunningAnimation(pub Handle<AnimationGraph>, Vec<AnimationNodeIndex>);
 
 /// play animations on any building with Processing and RunningAnimation components
 pub fn update_building_animations(
@@ -509,18 +509,21 @@ pub fn update_building_animations(
     for (entity, processing, running_animation) in buildings.iter() {
         for child in children.iter_descendants(entity) {
             if let Ok(mut player) = players.get_mut(child) {
-                player.play(running_animation.1).repeat();
+                let RunningAnimation(handle, indices) = running_animation;
+                for index in indices.clone() {
+                    player.play(index).repeat();
 
-                commands
-                    .entity(child)
-                    .try_insert_if_new(AnimationGraphHandle(running_animation.0.clone()));
+                    commands
+                        .entity(child)
+                        .try_insert_if_new(AnimationGraphHandle(handle.clone()));
 
-                match processing.status {
-                    ProcessingStatus::Running => {
-                        player.play(running_animation.1).resume();
-                    }
-                    _ => {
-                        player.play(running_animation.1).pause();
+                    match processing.status {
+                        ProcessingStatus::Running => {
+                            player.play(index).resume();
+                        }
+                        _ => {
+                            player.play(index).pause();
+                        }
                     }
                 }
             }

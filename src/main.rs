@@ -99,7 +99,7 @@ fn main() {
         ))
         .init_state::<GameState>()
         .insert_resource(worldgen::WorldGen::generate())
-        .insert_resource(effects::Effects::default())
+        .insert_resource(effects::EffectMap::default())
         .insert_resource(controls::Controls::default())
         .add_message::<BuildingPlacedMessage>()
         .add_systems(
@@ -111,6 +111,7 @@ fn main() {
                 environment::setup_environment,
                 hud::setup_hud,
                 effects::create_smoke_effect,
+                effects::create_sparks_effect,
             ),
         )
         .add_systems(
