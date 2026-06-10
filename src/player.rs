@@ -94,8 +94,8 @@ pub fn setup_player(
         HeldBuilding(None),
         OpenBuilding(None),
         Money(0),
+        Transform::from_translation(spawn_pos),
         (
-            Transform::from_translation(spawn_pos),
             RigidBody::Dynamic,
             Collider::capsule(0.3, 2.0),
             Friction::new(0.1),

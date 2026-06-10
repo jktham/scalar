@@ -91,5 +91,9 @@ pub fn setup_environment(
             directional_light_exponent: 200.0,
             falloff: FogFalloff::from_visibility_squared(400.0),
         },
+        SpatialListener {
+            left_ear_offset: Vec3::new(-4.0, 0.0, 0.0),
+            right_ear_offset: Vec3::new(4.0, 0.0, 0.0),
+        },
     ));
 }

@@ -3,7 +3,10 @@ use core::fmt;
 use avian3d::collision::collider::{
     ColliderConstructor, ColliderConstructorHierarchy, CollisionLayers,
 };
-use bevy::prelude::*;
+use bevy::{
+    audio::{SpatialScale, Volume},
+    prelude::*,
+};
 use bevy_hanabi::{EffectSpawner, ParticleEffect};
 use fastrand::Rng;
 use strum_macros::EnumIter;
@@ -140,6 +143,8 @@ pub fn place_building(
                 let smoke_handle = effect_map.0.get("smoke").unwrap().clone();
                 let sparks_handle = effect_map.0.get("sparks").unwrap().clone();
 
+                let audio_handle = asset_server.load::<AudioSource>("audio/miner.mp3");
+
                 commands.spawn((
                     Building::Miner,
                     MinerStatic,
@@ -182,6 +187,19 @@ pub fn place_building(
                             RunningParticles,
                             ParticleEffect::new(sparks_handle),
                             Transform::from_translation(Vec3::new(0.0, 0.3, 0.0))
+                        ),
+                        (
+                            RunningSound,
+                            AudioPlayer::new(audio_handle),
+                            PlaybackSettings {
+                                mode: bevy::audio::PlaybackMode::Loop,
+                                volume: Volume::Linear(1.0),
+                                paused: true,
+                                spatial: true,
+                                spatial_scale: Some(SpatialScale::new(0.25)),
+                                ..default()
+                            },
+                            Transform::from_translation(Vec3::new(0.0, 1.0, 0.0))
                         )
                     ],
                 ));
@@ -532,10 +550,10 @@ pub fn update_building_animations(
 }
 
 #[derive(Component)]
-/// marker on child with particle effect spawner to activate when building runs
+/// marker on child with particle EffectSpawner to activate when building runs
 pub struct RunningParticles;
 
-/// spawn particle effects on any building with Processing and RunningParticles components
+/// activate EffectSpawner on any building with Processing and RunningParticles components
 pub fn update_building_effects(
     buildings: Query<(Entity, &Processing)>,
     children: Query<&Children>,
@@ -550,6 +568,32 @@ pub fn update_building_effects(
                     }
                     _ => {
                         spawner.active = false;
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Component)]
+/// marker on child with SpatialAudioSink to activate when building runs
+pub struct RunningSound;
+
+/// activate SpatialAudioSink on any building with Processing and RunningSound components
+pub fn update_building_sounds(
+    buildings: Query<(Entity, &Processing)>,
+    children: Query<&Children>,
+    audio_sinks: Query<&SpatialAudioSink, With<RunningSound>>,
+) {
+    for (entity, processing) in buildings.iter() {
+        for child in children.iter_descendants(entity) {
+            if let Ok(sink) = audio_sinks.get(child) {
+                match processing.status {
+                    ProcessingStatus::Running => {
+                        sink.play();
+                    }
+                    _ => {
+                        sink.pause();
                     }
                 }
             }

@@ -133,6 +133,7 @@ fn main() {
                 hud::update_money,
                 buildings::update_building_animations,
                 buildings::update_building_effects,
+                buildings::update_building_sounds,
                 world::remove_depleted_nodes,
                 (menus::pause::interact).run_if(in_state(GameState::PauseMenu)),
                 (menus::build::interact).run_if(in_state(GameState::BuildMenu)),
